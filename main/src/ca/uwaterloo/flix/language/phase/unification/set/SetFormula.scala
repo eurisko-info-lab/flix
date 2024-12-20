@@ -201,7 +201,7 @@ object SetFormula {
     * fine.
     */
   @nowarn
-  final case class ElemSet private(s: SortedSet[Int]) extends SetFormula {
+  final case class ElemSet (s: SortedSet[Int]) extends SetFormula {
     if (CHECK_INVARIANTS) assert(s.nonEmpty)
   }
 
@@ -214,7 +214,7 @@ object SetFormula {
     * fine.
     */
   @nowarn
-  final case class Compl private(f: SetFormula) extends SetFormula
+  final case class Compl (f: SetFormula) extends SetFormula
 
   /**
     * An intersection of formulas (`f1 ∩ f2`).
@@ -244,7 +244,7 @@ object SetFormula {
     * fine.
     */
   @nowarn
-  final case class Inter private(
+  final case class Inter (
                                   elemPos: Option[ElemSet], cstsPos: SortedSet[Cst], varsPos: SortedSet[Var],
                                   elemNeg: Option[ElemSet], cstsNeg: SortedSet[Cst], varsNeg: SortedSet[Var],
                                   other: List[SetFormula]
@@ -317,9 +317,7 @@ object SetFormula {
     * fine.
     */
   @nowarn
-  final case class Xor private(
-                              other: List[SetFormula]
-                              ) extends SetFormula {
+  final case class Xor (other: List[SetFormula]) extends SetFormula {
     if (CHECK_INVARIANTS) {
       // There is always at least two subformulas.
       assert(other.sizeIs >= 2, message = this.toString)
@@ -335,9 +333,9 @@ object SetFormula {
     elemPos.iterator ++
       cstsPos.iterator ++
       varsPos.iterator ++
-      elemNeg.iterator.map(Compl(_)) ++
-      cstsNeg.iterator.map(Compl(_)) ++
-      varsNeg.iterator.map(Compl(_)) ++
+      elemNeg.iterator.map(e => Compl(e)) ++
+      cstsNeg.iterator.map(c => Compl(c)) ++
+      varsNeg.iterator.map(v => Compl(v)) ++
       other.iterator
   }
 

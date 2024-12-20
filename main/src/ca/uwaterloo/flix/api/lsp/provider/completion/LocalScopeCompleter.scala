@@ -103,6 +103,6 @@ object LocalScopeCompleter {
     * Tries to create a LocalDefCompletion for the given name and resolutions.
     */
   private def mkLocalDefCompletion(resolutions: List[Resolution]): Iterable[Completion] =
-    resolutions.collect{ case Resolution.LocalDef(sym, fparams) => (sym, fparams)}.map(Completion.LocalDefCompletion.tupled)
+    resolutions.collect{ case Resolution.LocalDef(sym, fparams) => (sym, fparams)}.map(Completion.LocalDefCompletion.apply) // apply => tupled
 
 }

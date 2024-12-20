@@ -22,6 +22,7 @@ import ca.uwaterloo.flix.util.{Formatter, InternalCompilerException, Result}
 import ca.uwaterloo.flix.util.Result.{Err, Ok}
 
 import java.io.PrintStream
+
 import coursier.{Dependency as CoursierDependency, Fetch, Resolve}
 import coursier.cache.{Cache, FileCache}
 import coursier.util.Task
@@ -31,7 +32,7 @@ import java.nio.file.{Files, Path, Paths}
 object MavenPackageManager {
 
   val FolderName = "cache"
-  private val scalaVersion = "2.13"
+  private val scalaVersion = "3"
 
   /**
     * Installs all MavenDependencies for a Manifest including transitive

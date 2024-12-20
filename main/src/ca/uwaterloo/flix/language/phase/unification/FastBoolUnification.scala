@@ -327,7 +327,7 @@ object FastBoolUnification {
       case (Term.False, Term.Cst(_)) => throw ConflictException(t1, t2, loc)
 
       // Non-trivial and non-conflicted equation: keep it.
-      case _ => Equation(t1, t2, loc) :: checkAndSimplify(es)
+      case _ => l.head :: checkAndSimplify(es)
     }
   }
 
