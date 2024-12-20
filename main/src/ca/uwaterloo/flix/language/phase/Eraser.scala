@@ -34,9 +34,10 @@ import ca.uwaterloo.flix.util.collection.MapOps
   *     - type arguments are erased
   *     - polymorphic term types in the declaration are polymorphically erased (see [[polymorphicErasure]])
   */
-object Eraser {
+class Eraser extends CompilerPlugin[Root, Root] {
+  override def name: String = "Eraser"
 
-  def run(root: Root)(implicit flix: Flix): Root = flix.phase("Eraser") {
+  override def run(root: Root)(implicit flix: Flix): Root = flix.phase("Eraser") {
     val newDefs = ParOps.parMapValues(root.defs)(visitDef)
     val newEnums = ParOps.parMapValues(root.enums)(visitEnum)
     val newStructs = ParOps.parMapValues(root.structs)(visitStruct)

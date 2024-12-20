@@ -33,12 +33,13 @@ import ca.uwaterloo.flix.util.ParOps
   *     for the [[Monomorpher]] to work.
   *
   */
-object TreeShaker2 {
+class TreeShaker2 extends CompilerPlugin[Root, Root] {
+  override def name: String = "TreeShaker2"
 
   /**
     * Performs tree shaking on the given AST `root`.
     */
-  def run(root: Root)(implicit flix: Flix): Root = flix.phase("TreeShaker2") {
+  override def run(root: Root)(implicit flix: Flix): Root = flix.phase("TreeShaker2") {
     // Entry points are always reachable.
     val initReach = root.entryPoints
 

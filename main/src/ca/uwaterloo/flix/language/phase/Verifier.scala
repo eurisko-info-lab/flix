@@ -26,9 +26,10 @@ import scala.annotation.tailrec
 /**
   * Verify the AST before bytecode generation.
   */
-object Verifier {
+class Verifier extends CompilerPlugin[Root, Root] {
+  override def name: String = "Verifier"
 
-  def run(root: Root)(implicit flix: Flix): Root = flix.phase("Verifier") {
+  override def run(root: Root)(implicit flix: Flix): Root = flix.phase("Verifier") {
     if (flix.options.xnoverify) {
       root
     } else {

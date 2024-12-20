@@ -26,7 +26,8 @@ import ca.uwaterloo.flix.util.{InternalCompilerException, ParOps}
 import java.util.concurrent.ConcurrentLinkedQueue
 import scala.jdk.CollectionConverters.*
 
-object LambdaLift {
+class LambdaLift extends CompilerPlugin[SimplifiedAst.Root, LiftedAst.Root] {
+  override def name: String = "LambdaLift"
 
   // We are safe to use the top scope everywhere because we do not use unification in this or future phases.
   private implicit val S: Scope = Scope.Top
@@ -34,7 +35,7 @@ object LambdaLift {
   /**
     * Performs lambda lifting on the given AST `root`.
     */
-  def run(root: SimplifiedAst.Root)(implicit flix: Flix): LiftedAst.Root = flix.phase("LambdaLift") {
+  override def run(root: SimplifiedAst.Root)(implicit flix: Flix): LiftedAst.Root = flix.phase("LambdaLift") {
     implicit val sctx: SharedContext = SharedContext.mk()
 
     val defs = ParOps.parMapValues(root.defs)(visitDef)

@@ -24,12 +24,13 @@ import ca.uwaterloo.flix.language.dbg.AstPrinter.*
 /**
   * Iterative runs of the optimizer pipeline: OccurrenceAnalyzer -> Inliner -> Reducer.
   */
-object Optimizer {
+class Optimizer extends CompilerPlugin[Root, Root] {
+  override def name: String = "Optimizer"
 
   /**
     * Returns an optimized version of the given AST `root`.
     */
-  def run(root: Root)(implicit flix: Flix): Root = flix.phase("Optimizer") {
+  override def run(root: Root)(implicit flix: Flix): Root = flix.phase("Optimizer") {
     if (flix.options.xnooptimizer) {
       root
     } else {

@@ -39,7 +39,8 @@ import ca.uwaterloo.flix.util.{InternalCompilerException, ParOps}
 // - Return a [[Validation]] from visitExp etc.
 // - Decide which expressions to allow as head and body terms.
 
-object Lowering {
+class Lowering extends CompilerPlugin[TypedAst.Root, LoweredAst.Root] {
+  override def name: String = "Lowering"
 
   private object Defs {
     lazy val Box: Symbol.DefnSym = Symbol.mkDefnSym("Fixpoint.Boxable.box")
@@ -142,7 +143,7 @@ object Lowering {
   /**
     * Translates internal Datalog constraints into Flix Datalog constraints.
     */
-  def run(root: TypedAst.Root)(implicit flix: Flix): LoweredAst.Root = flix.phase("Lowering") {
+  override def run(root: TypedAst.Root)(implicit flix: Flix): LoweredAst.Root = flix.phase("Lowering") {
     implicit val r: TypedAst.Root = root
 
     val defs = ParOps.parMapValues(root.defs)(visitDef)

@@ -32,12 +32,13 @@ import ca.uwaterloo.flix.util.ParOps
   *     [[Monomorpher]] will erase unused instances so this phase must check all instances
   *     for the [[Monomorpher]] to work.
   */
-object TreeShaker1 {
+class TreeShaker1 extends CompilerPlugin[Root, Root] {
+  override def name: String = "TreeShaker1"
 
-  /**
+    /**
     * Performs tree shaking on the given AST `root`.
     */
-  def run(root: Root)(implicit flix: Flix): Root = flix.phase("TreeShaker1") {
+  override def run(root: Root)(implicit flix: Flix): Root = flix.phase("TreeShaker1") {
     // Entry points are always reachable.
     val initReach: Set[ReachableSym] = root.entryPoints.map(ReachableSym.DefnSym.apply)
 

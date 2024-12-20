@@ -634,6 +634,37 @@ class Flix {
       throw ex
   }
 
+  case class PhaseConfig[Input, Output](inputType: String, outputType: String, pluginNames: List[String])
+
+  def parseConfig(resourcePath: String): List[PhaseConfig[_, _]] = {
+    val lines = scala.io.Source.fromResource(resourcePath).getLines()
+    lines.map { line =>
+      val Array(inputType, plugins) = line.split(":").map(_.trim)
+      val pluginNames = plugins.split(",").map(_.trim).toList
+      PhaseConfig(inputType, inputType, pluginNames)
+    }.toList
+  }
+
+  def loadPlugin[Input, Output](className: String): CompilerPlugin[Input, Output] = {
+    val clazz = Class.forName(className)
+    clazz.getDeclaredConstructor().newInstance().asInstanceOf[CompilerPlugin[Input, Output]]
+  }
+
+  def runPipeline(phases: List[PhaseConfig[_, _]], initialAst: Any): CompilationResult = {
+    var currentAst = initialAst
+
+    for (phase <- phases) {
+      println(s"Running phase: ${phase.pluginNames.mkString(", ")} on ${phase.inputType}")
+
+      for (pluginName <- phase.pluginNames) {
+        val plugin = loadPlugin(pluginName)
+        currentAst = plugin.run(plugin.convertInputType(currentAst))(this)
+      }
+    }
+
+    currentAst.asInstanceOf[CompilationResult]
+  }
+
   /**
     * Compiles the given typed ast to an executable ast.
     */
@@ -644,21 +675,10 @@ class Flix {
     // Initialize fork-join thread pool.
     initForkJoinPool()
 
-    val loweringAst = Lowering.run(typedAst)
-    val treeShaker1Ast = TreeShaker1.run(loweringAst)
-    val monomorpherAst = Monomorpher.run(treeShaker1Ast)
-    val simplifierAst = Simplifier.run(monomorpherAst)
-    val closureConvAst = ClosureConv.run(simplifierAst)
-    val lambdaLiftAst = LambdaLift.run(closureConvAst)
-    val optimizerAst = Optimizer.run(lambdaLiftAst)
-    val treeShaker2Ast = TreeShaker2.run(optimizerAst)
-    val effectBinderAst = EffectBinder.run(treeShaker2Ast)
-    val tailPosAst = TailPos.run(effectBinderAst)
-    Verifier.run(tailPosAst)
-    val eraserAst = Eraser.run(tailPosAst)
-    val reducerAst = Reducer.run(eraserAst)
-    val varOffsetsAst = VarOffsets.run(reducerAst)
-    val result = JvmBackend.run(varOffsetsAst)
+    val configFilePath = "phases.conf" // Path to pipeline configuration
+    val phases = parseConfig(configFilePath)
+
+    val result = runPipeline(phases, typedAst)
 
     // Shutdown fork-join thread pool.
     shutdownForkJoinPool()

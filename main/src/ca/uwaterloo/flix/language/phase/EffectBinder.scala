@@ -43,7 +43,8 @@ import scala.collection.mutable
   * Currently, this phase let-binds everything maximally, simplifying the
   * algorithm.
   */
-object EffectBinder {
+class EffectBinder extends CompilerPlugin[LiftedAst.Root, ReducedAst.Root] {
+  override def name: String = "EffectBinder"
 
   // We are safe to use the top scope everywhere because we do not use unification in this or future phases.
   private implicit val S: Scope = Scope.Top
@@ -52,7 +53,7 @@ object EffectBinder {
     * Transforms the AST such that effect operations will be run without an
     * operand stack.
     */
-  def run(root: LiftedAst.Root)(implicit flix: Flix): ReducedAst.Root = flix.phase("EffectBinder") {
+  override def run(root: LiftedAst.Root)(implicit flix: Flix): ReducedAst.Root = flix.phase("EffectBinder") {
     val newDefs = ParOps.parMapValues(root.defs)(visitDef)
     val newEnums = ParOps.parMapValues(root.enums)(visitEnum)
     val newStructs = ParOps.parMapValues(root.structs)(visitStruct)

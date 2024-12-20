@@ -36,12 +36,13 @@ import ca.uwaterloo.flix.util.collection.MapOps
   * For correctness it is assumed that all calls in the given AST have [[ExpPosition.NonTail]]
   * and there are no [[Expr.ApplySelfTail]] nodes present.
   */
-object TailPos {
+class TailPos extends CompilerPlugin[Root, Root] {
+  override def name: String = "TailPos"
 
   /**
     * Identifies expressions in tail position in the given AST `root`.
     */
-  def run(root: Root)(implicit flix: Flix): Root = flix.phase("TailPos") {
+  override def run(root: Root)(implicit flix: Flix): Root = flix.phase("TailPos") {
     val defns = ParOps.parMapValues(root.defs)(visitDef)
     root.copy(defs = defns)
   }

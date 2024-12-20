@@ -21,17 +21,19 @@ import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.ast.ReducedAst.*
 import ca.uwaterloo.flix.language.ast.{MonoType, SourceLocation, Symbol}
 import ca.uwaterloo.flix.language.dbg.AstPrinter.DebugNoOp
+import ca.uwaterloo.flix.language.phase.CompilerPlugin
 import ca.uwaterloo.flix.runtime.CompilationResult
 import ca.uwaterloo.flix.util.InternalCompilerException
 
 import java.lang.reflect.InvocationTargetException
 
-object JvmBackend {
+class JvmBackend extends CompilerPlugin[Root, CompilationResult] {
+  override def name: String = "JvmBackend"
 
   /**
     * Emits JVM bytecode for the given AST `root`.
     */
-  def run(root: Root)(implicit flix: Flix): CompilationResult = flix.phase("JvmBackend") {
+  override def run(root: Root)(implicit flix: Flix): CompilationResult = flix.phase("JvmBackend") {
 
     // Put the AST root into implicit scope.
     implicit val r: Root = root

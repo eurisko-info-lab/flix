@@ -29,12 +29,13 @@ import scala.annotation.tailrec
 /**
   * A phase that simplifies the MonoAst by elimination of pattern matching and other rewritings.
   */
-object Simplifier {
+class Simplifier extends CompilerPlugin[MonoAst.Root, SimplifiedAst.Root] {
+  override def name: String = "Simplifier"
 
   // We are safe to use the top scope everywhere because we do not use unification in this or future phases.
   private implicit val S: Scope = Scope.Top
 
-  def run(root: MonoAst.Root)(implicit flix: Flix): SimplifiedAst.Root = flix.phase("Simplifier") {
+  override def run(root: MonoAst.Root)(implicit flix: Flix): SimplifiedAst.Root = flix.phase("Simplifier") {
     implicit val universe: Set[Symbol.EffectSym] = root.effects.keys.toSet
     implicit val r: MonoAst.Root = root
     val defs = ParOps.parMapValues(root.defs)(visitDef)

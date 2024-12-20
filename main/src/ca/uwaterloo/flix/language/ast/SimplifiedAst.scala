@@ -67,7 +67,7 @@ object SimplifiedAst {
       def purity: Purity = Pure
     }
 
-    @IntroducedBy(ClosureConv.getClass)
+    @IntroducedBy(ClosureConv().getClass)
     case class LambdaClosure(cparams: List[FormalParam], fparams: List[FormalParam], freeVars: List[FreeVar], exp: Expr, tpe: MonoType, loc: SourceLocation) extends Expr {
       def purity: Purity = Pure
     }

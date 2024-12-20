@@ -26,15 +26,17 @@ import ca.uwaterloo.flix.util.{InternalCompilerException, ParOps}
 import scala.collection.immutable.SortedSet
 import scala.collection.mutable
 
-object ClosureConv {
+class ClosureConv extends CompilerPlugin[Root, Root] {
+  override def name: String = "ClosureConv"
 
-  // We are safe to use the top scope everywhere because we do not use unification in this or future phases.
+
+    // We are safe to use the top scope everywhere because we do not use unification in this or future phases.
   private implicit val S: Scope = Scope.Top
 
   /**
     * Performs closure conversion on the given AST `root`.
     */
-  def run(root: Root)(implicit flix: Flix): Root = flix.phase("ClosureConv") {
+  override def run(root: Root)(implicit flix: Flix): Root = flix.phase("ClosureConv") {
     val newDefs = ParOps.parMapValues(root.defs)(visitDef)
 
     root.copy(defs = newDefs)

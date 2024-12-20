@@ -35,9 +35,10 @@ import scala.jdk.CollectionConverters.*
   *   1. Collect a flat set of all types of the program, i.e., if `List[String]` is
   *   in the list, so is `String`.
   */
-object Reducer {
+class Reducer extends CompilerPlugin[Root, Root] {
+  override def name: String = "Reducer"
 
-  def run(root: Root)(implicit flix: Flix): Root = flix.phase("Reducer") {
+  override def run(root: Root)(implicit flix: Flix): Root = flix.phase("Reducer") {
     implicit val ctx: SharedContext = SharedContext(new ConcurrentLinkedQueue, new ConcurrentHashMap())
 
     val newDefs = ParOps.parMapValues(root.defs)(visitDef)

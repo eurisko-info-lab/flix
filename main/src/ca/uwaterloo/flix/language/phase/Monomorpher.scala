@@ -83,7 +83,8 @@ import scala.collection.mutable
   *   - Case set formulas are a single CaseSet literal.
   *
   */
-object Monomorpher {
+class Monomorpher extends CompilerPlugin[LoweredAst.Root, MonoAst.Root] {
+  override def name: String = "Monomorpher"
 
   // TODO levels trying top scope to get it to compile. Revisit.
   private implicit val S: Scope = Scope.Top
@@ -320,7 +321,7 @@ object Monomorpher {
   /**
     * Performs monomorphization of the given AST `root`.
     */
-  def run(root: LoweredAst.Root)(implicit flix: Flix): MonoAst.Root = flix.phase("Monomorpher") {
+  override def run(root: LoweredAst.Root)(implicit flix: Flix): MonoAst.Root = flix.phase("Monomorpher") {
 
     implicit val r: LoweredAst.Root = root
     implicit val is: Map[(Symbol.TraitSym, TypeConstructor), Instance] = mkFastInstanceLookup(root.instances)

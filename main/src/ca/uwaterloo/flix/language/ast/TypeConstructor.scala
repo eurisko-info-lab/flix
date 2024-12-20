@@ -27,7 +27,7 @@ object TypeConstructor {
   /**
     * A type constructor that represent an unconstrained type after monomorphization.
     */
-  @IntroducedBy(Monomorpher.getClass)
+  @IntroducedBy(Monomorpher().getClass)
   case object AnyType extends TypeConstructor {
     override def kind: Kind = Kind.Star
   }
@@ -143,7 +143,7 @@ object TypeConstructor {
     *
     * Warning: This is not part of the frontend; it only exists post Simplification.
     */
-  @IntroducedBy(Simplifier.getClass)
+  @IntroducedBy(Simplifier().getClass)
   case class ArrowWithoutEffect(arity: Int) extends TypeConstructor {
     def kind: Kind = Kind.mkArrow(arity)
   }
@@ -205,7 +205,7 @@ object TypeConstructor {
   /**
     * A type constructor that represent the type of channel senders.
     */
-  @EliminatedBy(Lowering.getClass)
+  @EliminatedBy(Lowering().getClass)
   case object Sender extends TypeConstructor {
     /**
       * The shape of a sender is Sender[t].
@@ -216,7 +216,7 @@ object TypeConstructor {
   /**
     * A type constructor that represent the type of channel receivers.
     */
-  @EliminatedBy(Lowering.getClass)
+  @EliminatedBy(Lowering().getClass)
   case object Receiver extends TypeConstructor {
     /**
       * The shape of a sender is Receiver[t].
@@ -296,7 +296,7 @@ object TypeConstructor {
     *
     * Warning: This is not part of the frontend; it only exists post Simplification.
     */
-  @IntroducedBy(Simplifier.getClass)
+  @IntroducedBy(Simplifier().getClass)
   case object ArrayWithoutRegion extends TypeConstructor {
     /**
       * The shape of an array is `ArrayWithoutRegion[t]`.
@@ -475,7 +475,7 @@ object TypeConstructor {
     *
     * Warning: This is not part of the frontend; it only exists post Simplification.
     */
-  @IntroducedBy(Simplifier.getClass)
+  @IntroducedBy(Simplifier().getClass)
   case object RegionWithoutRegion extends TypeConstructor {
     /**
       * The shape of a region is RegionWithoutRegion.
