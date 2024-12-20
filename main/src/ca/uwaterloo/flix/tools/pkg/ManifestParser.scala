@@ -20,6 +20,7 @@ import ca.uwaterloo.flix.tools.pkg.Dependency.{FlixDependency, JarDependency, Ma
 import ca.uwaterloo.flix.tools.pkg.github.GitHub
 import ca.uwaterloo.flix.util.Result
 import ca.uwaterloo.flix.util.Result.{Err, Ok, traverse}
+
 import org.tomlj.*
 
 import java.io.{IOException, StringReader}

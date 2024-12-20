@@ -21,6 +21,7 @@ import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.ast.shared.{Scope, VarText}
 import ca.uwaterloo.flix.language.ast.{Kind, Name, RigidityEnv, SourceLocation, Symbol, Type, TypeConstructor}
 import ca.uwaterloo.flix.util.Result
+
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.collection.immutable.SortedSet

@@ -22,6 +22,7 @@ import ca.uwaterloo.flix.api.lsp.{Consumer, Position, Range, ResponseStatus, Tex
 import ca.uwaterloo.flix.language.ast.TypedAst.Root
 import ca.uwaterloo.flix.language.ast.shared.{AssocTypeConstructor, EqualityConstraint, SymUse, TraitConstraint}
 import ca.uwaterloo.flix.language.ast.{SourceLocation, Symbol, Type, TypedAst}
+
 import org.json4s.JsonAST.JObject
 import org.json4s.JsonDSL.*
 

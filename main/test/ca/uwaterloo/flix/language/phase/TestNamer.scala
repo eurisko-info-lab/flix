@@ -19,6 +19,7 @@ package ca.uwaterloo.flix.language.phase
 import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.language.errors.NameError
 import ca.uwaterloo.flix.util.Options
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestNamer extends AnyFunSuite with TestUtils {

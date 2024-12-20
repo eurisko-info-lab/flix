@@ -17,6 +17,7 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.language.phase.unification.UnificationSuite
+
 import org.scalatest.Suites
 
 class PhaseSuite extends Suites(

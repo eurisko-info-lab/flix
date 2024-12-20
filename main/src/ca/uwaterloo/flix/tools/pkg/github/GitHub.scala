@@ -18,12 +18,13 @@ package ca.uwaterloo.flix.tools.pkg.github
 import ca.uwaterloo.flix.tools.pkg.{PackageError, ReleaseError, SemVer}
 import ca.uwaterloo.flix.util.Result.{Err, Ok}
 import ca.uwaterloo.flix.util.{Result, StreamOps}
+
 import org.json4s.JsonDSL.*
 import org.json4s.*
 import org.json4s.JsonAST.{JArray, JValue}
 import org.json4s.native.JsonMethods.{compact, parse, render}
 
-import java.io.{File, IOException, InputStream}
+import java.io.{IOException, InputStream}
 import java.net.{URI, URL}
 import java.nio.file.{Files, Path}
 import javax.net.ssl.HttpsURLConnection

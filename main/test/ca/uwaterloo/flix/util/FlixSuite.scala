@@ -19,6 +19,7 @@ package ca.uwaterloo.flix.util
 import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.ast.shared.SecurityContext
 import ca.uwaterloo.flix.runtime.{CompilationResult, TestFn}
+
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.nio.file.{Path, Paths}

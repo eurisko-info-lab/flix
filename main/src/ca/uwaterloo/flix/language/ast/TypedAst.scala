@@ -19,7 +19,7 @@ package ca.uwaterloo.flix.language.ast
 import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.ast.shared.SymUse.*
-import ca.uwaterloo.flix.util.collection.{ListMap, MultiMap}
+import ca.uwaterloo.flix.util.collection.ListMap
 
 import java.lang.reflect.{Constructor, Field, Method}
 

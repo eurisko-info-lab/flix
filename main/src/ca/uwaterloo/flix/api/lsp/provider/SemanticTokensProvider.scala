@@ -22,6 +22,7 @@ import ca.uwaterloo.flix.language.ast.shared.SymUse.*
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.ast.{SourceLocation, Symbol, Type, TypeConstructor, TypedAst}
 import ca.uwaterloo.flix.util.collection.IteratorOps
+
 import org.json4s.JsonAST.JObject
 import org.json4s.JsonDSL.*
 

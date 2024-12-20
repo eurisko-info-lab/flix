@@ -20,6 +20,7 @@ import ca.uwaterloo.flix.language.ast.shared.SecurityContext
 import ca.uwaterloo.flix.language.phase.unification.zhegalkin.ZhegalkinCache
 import ca.uwaterloo.flix.util.StatUtils.{average, median}
 import ca.uwaterloo.flix.util.{FileOps, LocalResource, Options, StatUtils}
+
 import org.json4s.JValue
 import org.json4s.JsonDSL.*
 import org.json4s.native.JsonMethods
@@ -205,7 +206,7 @@ object CompilerPerf {
 
   case class Run(lines: Int, time: Long, phases: List[(String, Long)])
 
-  case class Runs(lines: Int, times: List[Long], phases: List[(String, List[Long])])
+  private case class Runs(lines: Int, times: List[Long], phases: List[(String, List[Long])])
 
   /**
     * Run compiler performance experiments.
@@ -263,6 +264,13 @@ object CompilerPerf {
       else
         StatUtils.median(xs)
 
+    def duplicatesOne(runs: Runs) = runs.phases.map {
+      case (phase, times) => ("phase" -> phase) ~ ("time" -> milliseconds(combine(times)))
+    }
+    def duplicatesTwo(runs: Runs) = runs.times.zipWithIndex.map({
+      case (time, i) => ("i" -> s"Run $i") ~ ("throughput" -> throughput(lines, time))
+    })
+
     //
     // Speedup
     //
@@ -301,9 +309,7 @@ object CompilerPerf {
         ("incremental" -> false) ~
         ("lines" -> lines) ~
         ("plot" -> ("maxy" -> maxObservedThroughput)) ~
-        ("results" -> baseline.times.zipWithIndex.map({
-          case (time, i) => ("i" -> s"Run $i") ~ ("throughput" -> throughput(lines, time))
-        }))
+        ("results" -> duplicatesTwo(baseline))
     writeFile("throughput.json", throughoutBaseLine)
 
     val throughputPar =
@@ -312,9 +318,7 @@ object CompilerPerf {
         ("incremental" -> false) ~
         ("lines" -> lines) ~
         ("plot" -> ("maxy" -> maxObservedThroughput)) ~
-        ("results" -> baselineWithPar.times.zipWithIndex.map({
-          case (time, i) => ("i" -> s"Run $i") ~ ("throughput" -> throughput(lines, time))
-        }))
+        ("results" -> duplicatesTwo(baselineWithPar))
     writeFile("throughputWithPar.json", throughputPar)
 
     val throughputParInc =
@@ -323,9 +327,7 @@ object CompilerPerf {
         ("incremental" -> true) ~
         ("lines" -> lines) ~
         ("plot" -> ("maxy" -> maxObservedThroughput)) ~
-        ("results" -> baselineWithParInc.times.zipWithIndex.map({
-          case (time, i) => ("i" -> s"Run $i") ~ ("throughput" -> throughput(lines, time))
-        }))
+        ("results" -> duplicatesTwo(baselineWithParInc))
     writeFile("throughputWithParInc.json", throughputParInc)
 
     //
@@ -336,9 +338,7 @@ object CompilerPerf {
         ("threads" -> MinThreads) ~
         ("incremental" -> false) ~
         ("lines" -> lines) ~
-        ("results" -> baseline.phases.map {
-          case (phase, times) => ("phase" -> phase) ~ ("time" -> milliseconds(combine(times)))
-        })
+        ("results" -> duplicatesOne(baseline))
     writeFile("time.json", timeBaseline)
 
     val timeWithPar =
@@ -346,9 +346,7 @@ object CompilerPerf {
         ("threads" -> MaxThreads) ~
         ("incremental" -> false) ~
         ("lines" -> lines) ~
-        ("results" -> baselineWithPar.phases.map {
-          case (phase, times) => ("phase" -> phase) ~ ("time" -> milliseconds(combine(times)))
-        })
+        ("results" -> duplicatesOne(baselineWithPar))
     writeFile("timeWithPar.json", timeWithPar)
 
     val timeWithParInc =
@@ -356,9 +354,7 @@ object CompilerPerf {
         ("threads" -> MaxThreads) ~
         ("incremental" -> true) ~
         ("lines" -> lines) ~
-        ("results" -> baselineWithParInc.phases.map {
-          case (phase, times) => ("phase" -> phase) ~ ("time" -> milliseconds(combine(times)))
-        })
+        ("results" -> duplicatesOne(baselineWithParInc))
     writeFile("timeWithParInc.json", timeWithParInc)
 
     //

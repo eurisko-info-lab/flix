@@ -5,6 +5,7 @@ import ca.uwaterloo.flix.language.ast.shared.SecurityContext
 import ca.uwaterloo.flix.language.phase.unification.zhegalkin.ZhegalkinCache
 import ca.uwaterloo.flix.runtime.CompilationResult
 import ca.uwaterloo.flix.util.{LocalResource, Options, StatUtils}
+
 import org.json4s.JsonDSL.*
 import org.json4s.native.JsonMethods
 

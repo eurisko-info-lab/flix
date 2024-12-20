@@ -5,9 +5,10 @@ import ca.uwaterloo.flix.tools.pkg.{Dependency, ManifestError, ManifestParser, P
 import ca.uwaterloo.flix.util.{Formatter, Result}
 import ca.uwaterloo.flix.util.Result.{Err, Ok}
 import ca.uwaterloo.flix.language.ast.Symbol
-import org.scalatest.funsuite.AnyFunSuite
 import ca.uwaterloo.flix.tools.pkg.Manifest
 import ca.uwaterloo.flix.tools.pkg.Permission
+
+import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
 import java.net.URI

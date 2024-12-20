@@ -19,6 +19,7 @@ package ca.uwaterloo.flix.language.phase
 import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.language.errors.TypeError
 import ca.uwaterloo.flix.util.{Options, Subeffecting}
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestTyper extends AnyFunSuite with TestUtils {

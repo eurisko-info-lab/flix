@@ -20,6 +20,7 @@ import ca.uwaterloo.flix.language.ast.AstSuite
 import ca.uwaterloo.flix.language.errors.TestCompilationMessage
 import ca.uwaterloo.flix.language.fmt.TestFormatType
 import ca.uwaterloo.flix.language.phase.PhaseSuite
+
 import org.scalatest.Suites
 
 class LanguageSuite extends Suites(

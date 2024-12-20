@@ -20,6 +20,7 @@ import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.language.phase.unification.set.EquationGenerator.mkEq
 import ca.uwaterloo.flix.language.phase.unification.set.SetFormulaGenerator.{Options, generate}
 import ca.uwaterloo.flix.language.phase.unification.set.SetUnification.{SolverListener, solve, stateString}
+
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.util.Random

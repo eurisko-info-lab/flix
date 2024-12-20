@@ -17,6 +17,7 @@ package ca.uwaterloo.flix.api.lsp
 
 import ca.uwaterloo.flix.language.ast.shared.{Input, SecurityContext, Source}
 import ca.uwaterloo.flix.language.ast.{SourceLocation, SourcePosition}
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class VisitorSuite extends AnyFunSuite {

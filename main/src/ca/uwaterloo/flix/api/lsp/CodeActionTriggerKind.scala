@@ -15,9 +15,10 @@
  */
 package ca.uwaterloo.flix.api.lsp
 
-import org.json4s.{JInt, JValue}
 import ca.uwaterloo.flix.util.Result
 import ca.uwaterloo.flix.util.Result.{Err, Ok}
+
+import org.json4s.{JInt, JValue}
 
 sealed trait CodeActionTriggerKind
 

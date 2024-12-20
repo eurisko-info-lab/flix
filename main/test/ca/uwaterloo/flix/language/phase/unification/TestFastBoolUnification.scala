@@ -18,6 +18,7 @@ package ca.uwaterloo.flix.language.phase.unification
 import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.language.ast.SourceLocation
 import ca.uwaterloo.flix.language.phase.unification.FastBoolUnification.{Term, solveAll, verify}
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestFastBoolUnification extends AnyFunSuite with TestUtils {

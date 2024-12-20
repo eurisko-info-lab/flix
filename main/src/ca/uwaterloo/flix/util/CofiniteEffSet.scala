@@ -16,8 +16,9 @@
 
 package ca.uwaterloo.flix.util
 
-import scala.collection.immutable.SortedSet
 import ca.uwaterloo.flix.language.ast.Symbol.EffectSym
+
+import scala.collection.immutable.SortedSet
 
 /**
   * Represents a finite or co-finite set with an infinite universe of integers.

@@ -24,6 +24,7 @@ import ca.uwaterloo.flix.language.ast.shared.SymUse.{DefSymUse, OpSymUse, SigSym
 import ca.uwaterloo.flix.language.ast.{SourceLocation, Symbol, Type, TypeConstructor}
 import ca.uwaterloo.flix.language.fmt.*
 import ca.uwaterloo.flix.language.phase.unification.SetFormula
+
 import org.json4s.JsonAST.JObject
 import org.json4s.JsonDSL.*
 

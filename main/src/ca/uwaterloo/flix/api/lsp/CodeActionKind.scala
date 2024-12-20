@@ -17,6 +17,7 @@ package ca.uwaterloo.flix.api.lsp
 
 import ca.uwaterloo.flix.util.Result
 import ca.uwaterloo.flix.util.Result.{Ok, Err}
+
 import org.json4s.{JString, JValue}
 
 sealed trait CodeActionKind {

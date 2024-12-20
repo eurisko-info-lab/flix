@@ -1,7 +1,8 @@
 package ca.uwaterloo.flix.tools
 
-import org.scalatest.funsuite.AnyFunSuite
 import ca.uwaterloo.flix.tools.pkg.Permission
+
+import org.scalatest.funsuite.AnyFunSuite
 
 class TestPermission extends AnyFunSuite{
   test("toString-ofString-java-interop") {

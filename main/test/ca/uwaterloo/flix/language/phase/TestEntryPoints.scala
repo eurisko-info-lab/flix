@@ -19,6 +19,7 @@ import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.language.ast.Symbol
 import ca.uwaterloo.flix.language.errors.EntryPointError
 import ca.uwaterloo.flix.util.Options
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestEntryPoints extends AnyFunSuite with TestUtils {

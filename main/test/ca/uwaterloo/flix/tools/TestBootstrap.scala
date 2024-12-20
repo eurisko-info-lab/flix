@@ -2,6 +2,7 @@ package ca.uwaterloo.flix.tools
 
 import ca.uwaterloo.flix.api.{Bootstrap, Flix}
 import ca.uwaterloo.flix.util.Formatter
+
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.nio.file.{Files, Path}

@@ -19,6 +19,7 @@ package ca.uwaterloo.flix.language.phase
 import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.language.errors.DerivationError
 import ca.uwaterloo.flix.util.Options
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestDeriver extends AnyFunSuite with TestUtils {

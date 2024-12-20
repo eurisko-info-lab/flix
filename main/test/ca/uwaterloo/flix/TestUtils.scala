@@ -23,6 +23,7 @@ import ca.uwaterloo.flix.language.ast.{SourceLocation, TypedAst}
 import ca.uwaterloo.flix.runtime.CompilationResult
 import ca.uwaterloo.flix.util.collection.Chain
 import ca.uwaterloo.flix.util.{Formatter, Options, Result, Validation}
+
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.reflect.ClassTag

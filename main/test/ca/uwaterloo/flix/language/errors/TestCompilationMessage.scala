@@ -5,6 +5,7 @@ import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.SourceLocation
 import ca.uwaterloo.flix.util.Formatter
 import ca.uwaterloo.flix.util.Formatter.NoFormatter
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestCompilationMessage extends AnyFunSuite with TestUtils {

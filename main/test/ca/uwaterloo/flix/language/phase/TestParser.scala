@@ -3,8 +3,8 @@ package ca.uwaterloo.flix.language.phase
 import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.language.errors.{LexerError, ParseError, WeederError}
 import ca.uwaterloo.flix.util.Options
-import org.scalatest.funsuite.AnyFunSuite
 
+import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.Suites
 
 class TestParser extends Suites(

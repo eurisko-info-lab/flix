@@ -17,7 +17,7 @@ package ca.uwaterloo.flix.api.lsp.provider.completion
 
 import ca.uwaterloo.flix.api.lsp.provider.completion.Completion.EnumTagCompletion
 import ca.uwaterloo.flix.language.ast.Symbol.{CaseSym, EnumSym}
-import ca.uwaterloo.flix.language.ast.{SourceLocation, Type, TypeConstructor, TypedAst}
+import ca.uwaterloo.flix.language.ast.{SourceLocation, TypedAst}
 
 object EnumTagCompleter {
 

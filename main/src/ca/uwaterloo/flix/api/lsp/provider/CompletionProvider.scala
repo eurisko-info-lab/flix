@@ -25,6 +25,7 @@ import ca.uwaterloo.flix.language.ast.TypedAst
 import ca.uwaterloo.flix.language.ast.shared.SyntacticContext
 import ca.uwaterloo.flix.language.errors.{ParseError, ResolutionError, TypeError, WeederError}
 import ca.uwaterloo.flix.language.phase.Lexer
+
 import org.json4s.JsonAST.JObject
 import org.json4s.JsonDSL.*
 

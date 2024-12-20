@@ -18,6 +18,7 @@ package flix.fuzzers
 import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.ast.shared.SecurityContext
+
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.nio.file.{Files, Paths}

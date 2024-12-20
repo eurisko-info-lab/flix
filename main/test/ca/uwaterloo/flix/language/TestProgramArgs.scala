@@ -18,6 +18,7 @@ package ca.uwaterloo.flix.language
 
 import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.util.{Options, Result}
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestProgramArgs extends AnyFunSuite with TestUtils {

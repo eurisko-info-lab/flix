@@ -18,6 +18,7 @@ package ca.uwaterloo.flix.language.phase
 import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.language.errors.KindError
 import ca.uwaterloo.flix.util.Options
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestKinder extends AnyFunSuite with TestUtils {

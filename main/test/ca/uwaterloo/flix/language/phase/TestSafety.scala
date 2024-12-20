@@ -20,6 +20,7 @@ import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.language.errors.{EntryPointError, SafetyError}
 import ca.uwaterloo.flix.language.errors.SafetyError.{IllegalCatchType, IllegalMethodEffect, IllegalNegativelyBoundWildCard, IllegalNestedTryCatch, IllegalNonPositivelyBoundVar, IllegalPatternInBodyAtom, IllegalRelationalUseOfLatticeVar, IllegalSpawnEffect, IllegalThrowType}
 import ca.uwaterloo.flix.util.Options
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestSafety extends AnyFunSuite with TestUtils {

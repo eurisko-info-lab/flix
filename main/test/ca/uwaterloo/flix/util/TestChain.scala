@@ -16,6 +16,7 @@
 package ca.uwaterloo.flix.util
 
 import ca.uwaterloo.flix.util.collection.Chain
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestChain extends AnyFunSuite {

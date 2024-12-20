@@ -16,6 +16,7 @@
 package ca.uwaterloo.flix.util
 
 import ca.uwaterloo.flix.language.ast.SourceLocation
+
 import org.json4s.JValue
 import org.json4s.native.JsonMethods
 

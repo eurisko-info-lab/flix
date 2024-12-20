@@ -22,6 +22,7 @@ import ca.uwaterloo.flix.api.lsp.consumers.StackConsumer
 import ca.uwaterloo.flix.language.ast.TypedAst.{Binder, Root}
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.ast.{SourceLocation, Symbol, Type, TypeConstructor, TypedAst}
+
 import org.json4s.JsonAST.JObject
 import org.json4s.JsonDSL.*
 

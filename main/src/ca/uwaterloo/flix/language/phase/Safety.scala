@@ -16,14 +16,14 @@ import java.math.BigInteger
 import scala.annotation.tailrec
 
 /**
-  * Checks the safety and well-formedness of:
-  *   - Datalog constraints.
-  *   - New object expressions.
-  *   - CheckedCast expressions.
-  *   - UncheckedCast expressions.
-  *   - TypeMatch expressions.
-  *   - Throw expressions.
-  */
+ * Checks the safety and well-formedness of:
+ *   - Datalog constraints.
+ *   - New object expressions.
+ *   - CheckedCast expressions.
+ *   - UncheckedCast expressions.
+ *   - TypeMatch expressions.
+ *   - Throw expressions.
+ */
 object Safety {
 
   /** Checks the safety and well-formedness of `root`. */
@@ -50,17 +50,16 @@ object Safety {
   }
 
   /**
-    * Checks tje safety and well-formedness of `exp0`.
-    *
-    * The checks are:
-    *   - Nested [[Expr.TryCatch]] expressions are disallowed unless the inner [[Expr.TryCatch]]
-    *     will be extracted (e.g. Lambda).
-    *   - [[Expr.TypeMatch]] must end with a default case.
-    *
-    *
-    * @param inTryCatch indicates whether `exp` is enclosed in a try-catch. This can be reset if the
-    *                   expression will later be extracted to its own function (e.g [[Expr.Lambda]]).
-    */
+   * Checks tje safety and well-formedness of `exp0`.
+   *
+   * The checks are:
+   *   - Nested [[Expr.TryCatch]] expressions are disallowed unless the inner [[Expr.TryCatch]]
+   *     will be extracted (e.g. Lambda).
+   *   - [[Expr.TypeMatch]] must end with a default case.
+   *
+   * @param inTryCatch indicates whether `exp` is enclosed in a try-catch. This can be reset if the
+   *                   expression will later be extracted to its own function (e.g [[Expr.Lambda]]).
+   */
   private def visitExp(exp0: Expr)(implicit inTryCatch: Boolean, renv: RigidityEnv, flix: Flix): List[SafetyError] = exp0 match {
     case Expr.Cst(_, _, _) =>
       Nil
@@ -141,11 +140,11 @@ object Safety {
     case Expr.RestrictableChoose(_, exp, rules, _, _, _) =>
       visitExp(exp) ++ rules.flatMap(rule => visitExp(rule.exp))
 
-      case Expr.Tag(_, exps, _, _, _) =>
-        exps.flatMap(visitExp)
+    case Expr.Tag(_, exps, _, _, _) =>
+      exps.flatMap(visitExp)
 
-      case Expr.RestrictableTag(_, exps, _, _, _) =>
-        exps.flatMap(visitExp)
+    case Expr.RestrictableTag(_, exps, _, _, _) =>
+      exps.flatMap(visitExp)
 
     case Expr.Tuple(elms, _, _, _) =>
       elms.flatMap(visitExp)
@@ -398,11 +397,11 @@ object Safety {
   }
 
   /**
-    * Checks if there are any impossible casts, i.e. casts that always fail.
-    *
-    *   - No primitive type can be cast to a reference type and vice-versa.
-    *   - No Bool type can be cast to a non-Bool type and vice-versa.
-    */
+   * Checks if there are any impossible casts, i.e. casts that always fail.
+   *
+   *   - No primitive type can be cast to a reference type and vice-versa.
+   *   - No Bool type can be cast to a non-Bool type and vice-versa.
+   */
   private def verifyUncheckedCast(cast: Expr.UncheckedCast)(implicit flix: Flix): List[SafetyError.ImpossibleUncheckedCast] = cast match {
     case Expr.UncheckedCast(exp, declaredType, _, _, _, loc) =>
       val from = exp.tpe
@@ -493,12 +492,12 @@ object Safety {
   }
 
   /**
-    * Checks that `p` is well-formed.
-    *
-    * @param posVars the positively bound variables.
-    * @param quantVars the quantified variables, not bound by lexical scope.
-    * @param latVars the variables in lattice position.
-    */
+   * Checks that `p` is well-formed.
+   *
+   * @param posVars   the positively bound variables.
+   * @param quantVars the quantified variables, not bound by lexical scope.
+   * @param latVars   the variables in lattice position.
+   */
   private def checkBodyPredicate(p: Predicate.Body, posVars: Set[Symbol.VarSym], quantVars: Set[Symbol.VarSym], latVars: Set[Symbol.VarSym])(implicit inTryCatch: Boolean, renv: RigidityEnv, flix: Flix): List[SafetyError] = p match {
     case Predicate.Body.Atom(_, den, polarity, _, terms, _, loc) =>
       // Check for non-positively bound negative variables.
@@ -612,11 +611,11 @@ object Safety {
   }
 
   /**
-    * Checks that `clazz` is [[java.lang.Throwable]] or a subclass.
-    *
-    * @param clazz the Java class specified in the catch clause
-    * @param loc   the location of the catch parameter.
-    */
+   * Checks that `clazz` is [[java.lang.Throwable]] or a subclass.
+   *
+   * @param clazz the Java class specified in the catch clause
+   * @param loc   the location of the catch parameter.
+   */
   private def checkCatchClass(clazz: Class[?], loc: SourceLocation): List[SafetyError] = {
     if (isThrowable(clazz)) List.empty
     else List(IllegalCatchType(loc))
@@ -641,17 +640,17 @@ object Safety {
   }
 
   /**
-    * Checks that `newObject` correctly implements its class. `newObject` contains `methods` that
-    * are supposed to implement `clazz`.
-    *
-    * The conditions are that:
-    *   - `clazz` must be an interface or have a non-private constructor without arguments.
-    *   - `clazz` must be public.
-    *   - `methods` must take the object itself (`this`) as the first argument.
-    *   - `methods` must include all required signatures (e.g. abstract methods).
-    *   - `methods` must not include non-existing methods.
-    *   - `methods` must not let control effects escape.
-    */
+   * Checks that `newObject` correctly implements its class. `newObject` contains `methods` that
+   * are supposed to implement `clazz`.
+   *
+   * The conditions are that:
+   *   - `clazz` must be an interface or have a non-private constructor without arguments.
+   *   - `clazz` must be public.
+   *   - `methods` must take the object itself (`this`) as the first argument.
+   *   - `methods` must include all required signatures (e.g. abstract methods).
+   *   - `methods` must not include non-existing methods.
+   *   - `methods` must not let control effects escape.
+   */
   private def checkObjectImplementation(newObject: Expr.NewObject)(implicit flix: Flix): List[SafetyError] = newObject match {
     case Expr.NewObject(_, clazz, tpe0, _, methods, loc) =>
       val tpe = Type.eraseAliases(tpe0)
@@ -712,10 +711,10 @@ object Safety {
   }
 
   /**
-    * Represents the Flix signature of a Java method.
-    *
-    * The signature contains no [[Type.Alias]].
-    */
+   * Represents the Flix signature of a Java method.
+   *
+   * The signature contains no [[Type.Alias]].
+   */
   private case class MethodSignature(name: String, paramTypes: List[Type], retTpe: Type)
 
   /** Returns a map of `methods` based on their [[MethodSignature]]. */

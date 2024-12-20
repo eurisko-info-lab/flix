@@ -19,6 +19,7 @@ package ca.uwaterloo.flix.language.fmt
 import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.language.ast.shared.{AliasConstructor, Scope, VarText}
 import ca.uwaterloo.flix.language.ast.{Kind, Name, SourceLocation, Symbol, Type, TypeConstructor}
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestFormatType extends AnyFunSuite with TestUtils {

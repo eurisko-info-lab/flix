@@ -22,6 +22,7 @@ import ca.uwaterloo.flix.language.ast.{Kind, Name, RigidityEnv, SourceLocation, 
 import ca.uwaterloo.flix.util.Result
 import ca.uwaterloo.flix.util.Result.Ok
 import ca.uwaterloo.flix.util.collection.ListMap
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestAssocTypeUnification extends AnyFunSuite with TestUtils {

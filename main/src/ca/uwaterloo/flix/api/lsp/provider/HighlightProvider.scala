@@ -23,6 +23,7 @@ import ca.uwaterloo.flix.language.ast.TypedAst.{Binder, Expr, Root}
 import ca.uwaterloo.flix.language.ast.shared.SymUse.CaseSymUse
 import ca.uwaterloo.flix.language.ast.shared.{AliasConstructor, AssocTypeConstructor, SymUse, TraitConstraint}
 import ca.uwaterloo.flix.language.ast.{Name, SourceLocation, Symbol, Type, TypeConstructor, TypedAst}
+
 import org.json4s.JsonAST.{JArray, JObject}
 import org.json4s.JsonDSL.*
 

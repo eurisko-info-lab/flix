@@ -20,6 +20,7 @@ import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.language.phase.jvm.BackendObjType
 import ca.uwaterloo.flix.runtime.CompilationResult
 import ca.uwaterloo.flix.util.{Options, Result, Validation}
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestFlixErrors extends AnyFunSuite with TestUtils {

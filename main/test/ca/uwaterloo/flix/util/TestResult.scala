@@ -17,6 +17,7 @@
 package ca.uwaterloo.flix.util
 
 import ca.uwaterloo.flix.util.Result.*
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestResult extends AnyFunSuite {

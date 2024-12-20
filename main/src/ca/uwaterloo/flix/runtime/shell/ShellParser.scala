@@ -17,7 +17,6 @@
 package ca.uwaterloo.flix.runtime.shell
 
 import org.jline.reader.{EOFError, ParsedLine, Parser}
-import org.jline.reader.Parser.ParseContext
 
 import java.util
 import scala.jdk.CollectionConverters.*

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 package ca.uwaterloo.flix.api.lsp
+
 import org.json4s.{JInt, JValue}
 
 /**

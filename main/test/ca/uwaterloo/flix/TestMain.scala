@@ -17,6 +17,7 @@
 package ca.uwaterloo.flix
 
 import ca.uwaterloo.flix.util.LibLevel
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class TestMain extends AnyFunSuite {

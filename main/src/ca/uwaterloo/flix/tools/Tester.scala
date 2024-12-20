@@ -19,6 +19,7 @@ import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.ast.Symbol
 import ca.uwaterloo.flix.runtime.{CompilationResult, TestFn}
 import ca.uwaterloo.flix.util.{Duration, Result}
+
 import org.jline.terminal.{Terminal, TerminalBuilder}
 
 import java.io.{ByteArrayOutputStream, OutputStream, PrintStream, PrintWriter, StringWriter}
