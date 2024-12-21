@@ -16,12 +16,15 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.*
 import ca.uwaterloo.flix.language.ast.TypedAst.*
 import ca.uwaterloo.flix.language.ast.shared.{AssocTypeDef, Scope}
 import ca.uwaterloo.flix.language.phase.unification.{Substitution, Unification}
 import ca.uwaterloo.flix.util.*
 import ca.uwaterloo.flix.util.collection.ListMap
+
+import scala.collection.mutable
 
 /**
   * Performs a re-checking of the effects in the program.
@@ -30,7 +33,8 @@ import ca.uwaterloo.flix.util.collection.ListMap
   *
   * This phase is only for debugging; inconsistencies indicate a bug in the typer and result in a crash.
   */
-object EffectVerifier {
+object EffectVerifier extends ValidPhasePlugin[TypedAst.Root, TypedAst.Root] {
+  override def name: String = "EffectVerifier"
 
   // We use top scope for simplicity. This is the most relaxed option.
   private implicit val S: Scope = Scope.Top
@@ -38,12 +42,13 @@ object EffectVerifier {
   /**
     * Verifies the effects in the given root.
     */
-  def run(root: Root)(implicit flix: Flix): Unit = {
+  override def run(root: Root)(implicit flix: Flix, errors: mutable.ListBuffer[CompilationMessage]): TypedAst.Root = {
     if (flix.options.xverifyeffects) {
       ParOps.parMapValues(root.defs)(visitDef(_)(root.eqEnv, flix))
       ParOps.parMapValues(root.sigs)(visitSig(_)(root.eqEnv, flix))
       ParOps.parMapValues(root.instances)(ins => ins.foreach(visitInstance(_)(root.eqEnv, flix)))
     }
+    root
   }
 
   /**

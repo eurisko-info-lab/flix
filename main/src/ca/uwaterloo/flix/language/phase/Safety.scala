@@ -1,6 +1,7 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.TypedAst.*
 import ca.uwaterloo.flix.language.ast.TypedAst.Predicate.Body
 import ca.uwaterloo.flix.language.ast.ops.TypedAstOps
@@ -14,6 +15,7 @@ import ca.uwaterloo.flix.util.{JvmUtils, ParOps}
 
 import java.math.BigInteger
 import scala.annotation.tailrec
+import scala.collection.mutable
 
 /**
  * Checks the safety and well-formedness of:
@@ -24,17 +26,19 @@ import scala.annotation.tailrec
  *   - TypeMatch expressions.
  *   - Throw expressions.
  */
-object Safety {
+object Safety extends ValidPhasePlugin[Root, Root] {
+  override def name: String = "Safety"
 
   /** Checks the safety and well-formedness of `root`. */
-  def run(root: Root)(implicit flix: Flix): (Root, List[SafetyError]) = flix.phaseNew("Safety") {
+  override def run(root: Root)(implicit flix: Flix, errors: mutable.ListBuffer[CompilationMessage]): Root = {
     val classSigErrs = ParOps.parMap(root.traits.values.flatMap(_.sigs))(visitSig).flatten
     val defErrs = ParOps.parMap(root.defs.values)(visitDef).flatten
     val instanceDefErrs = ParOps.parMap(TypedAstOps.instanceDefsOf(root))(visitDef).flatten
     val sigErrs = ParOps.parMap(root.sigs.values)(visitSig).flatten
-    val errors = classSigErrs ++ defErrs ++ instanceDefErrs ++ sigErrs
+    val errs = classSigErrs ++ defErrs ++ instanceDefErrs ++ sigErrs
 
-    (root, errors.toList)
+    errors ++= errs.toList
+    root
   }
 
   /** Checks the safety and well-formedness of `sig`. */

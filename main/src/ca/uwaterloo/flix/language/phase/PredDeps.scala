@@ -27,15 +27,18 @@ import ca.uwaterloo.flix.language.ast.{Type, TypeConstructor}
 import ca.uwaterloo.flix.language.dbg.AstPrinter.*
 import ca.uwaterloo.flix.util.{InternalCompilerException, ParOps}
 
+import scala.collection.mutable
+
 /**
   * The [[PredDeps]] class computes the [[LabelledPrecedenceGraph]] of the whole program,
   * which represents all static dependencies between datalog predicates.
   *
   * The computed [[LabelledPrecedenceGraph]] is used in [[Stratifier]].
   */
-object PredDeps {
+object PredDeps extends ValidPhasePlugin[Root, Root] {
+  override def name: String = "PredDeps"
 
-  def run(root: Root)(implicit flix: Flix): (Root, List[CompilationMessage]) = flix.phaseNew("PredDeps") {
+  override def run(root: Root)(implicit flix: Flix, errors: mutable.ListBuffer[CompilationMessage]): Root = {
     // Compute an over-approximation of the dependency graph for all constraints in the program.
     val defExps = root.defs.values.map(_.exp)
     val instanceExps = root.instances.values.flatten.flatMap(_.defs).map(_.exp)
@@ -46,7 +49,7 @@ object PredDeps {
       case (acc, d) => acc + visitExp(d)
     }, _ + _)
 
-    (root.copy(precedenceGraph = g), List.empty)
+    root.copy(precedenceGraph = g)
   }
 
   /**

@@ -21,7 +21,6 @@ import ca.uwaterloo.flix.language.ast.shared.{AvailableClasses, Input, SecurityC
 import ca.uwaterloo.flix.language.dbg.AstPrinter
 import ca.uwaterloo.flix.language.fmt.FormatOptions
 import ca.uwaterloo.flix.language.phase.*
-import ca.uwaterloo.flix.language.phase.jvm.JvmBackend
 import ca.uwaterloo.flix.language.{CompilationMessage, GenSym}
 import ca.uwaterloo.flix.runtime.CompilationResult
 import ca.uwaterloo.flix.tools.Summary
@@ -88,9 +87,15 @@ class Flix {
   private var cachedParserCst: SyntaxTree.Root = SyntaxTree.empty
   private var cachedWeederAst: WeededAst.Root = WeededAst.empty
   private var cachedDesugarAst: DesugaredAst.Root = DesugaredAst.empty
-  private var cachedKinderAst: KindedAst.Root = KindedAst.empty
-  private var cachedResolverAst: ResolvedAst.Root = ResolvedAst.empty
-  private var cachedTyperAst: TypedAst.Root = TypedAst.empty
+//  private var cachedKinderAst: KindedAst.Root = KindedAst.empty
+//  private var cachedResolverAst: ResolvedAst.Root = ResolvedAst.empty
+//  private var cachedTyperAst: TypedAst.Root = TypedAst.empty
+
+  private var validationCache : scala.collection.mutable.Map[String, Any] = scala.collection.mutable.Map(
+    "TypedAst.Root" -> TypedAst.empty,
+    "ResolvedAst.Root" -> ResolvedAst.empty,
+    "KindedAst.Root" -> KindedAst.empty
+  )
 
   /**
     * A cache of error messages for incremental compilation.
@@ -433,7 +438,7 @@ class Flix {
     case None =>
       inputs += name -> input
     case Some(_) =>
-      changeSet = changeSet.markChanged(input, cachedTyperAst.dependencyGraph)
+      changeSet = changeSet.markChanged(input, validationCache("TypedAst.Root").asInstanceOf[TypedAst.Root].dependencyGraph)
       inputs += name -> input
   }
 
@@ -445,7 +450,7 @@ class Flix {
   private def remInput(name: String, input: Input): Unit = inputs.get(name) match {
     case None => // nop
     case Some(_) =>
-      changeSet = changeSet.markChanged(input, cachedTyperAst.dependencyGraph)
+      changeSet = changeSet.markChanged(input, validationCache("TypedAst.Root").asInstanceOf[TypedAst.Root].dependencyGraph)
       inputs += name -> Input.Text(name, "", /* unused */ SecurityContext.NoPermissions)
   }
 
@@ -494,6 +499,46 @@ class Flix {
       errors.sortBy(_.loc).map(cm => cm.messageWithLoc(formatter))
   }
 
+  private case class PhaseConfig[Input, Output](inputType: String, outputType: String, pluginNames: List[String])
+
+  private def parseConfig(resourcePath: String): List[PhaseConfig[_, _]] = {
+    val lines = scala.io.Source.fromResource(resourcePath).getLines()
+    lines.map { line =>
+      val Array(inputType, plugins) = line.split(":").map(_.trim)
+      val pluginNames = plugins.split(",").map(_.trim).toList
+      PhaseConfig(inputType, null, pluginNames)
+    }.toList
+  }
+
+  private def loadValidPlugin[Input, Output](className: String): ValidPhasePlugin[Input, Output] = {
+    val objectClassName = s"$className$$" // Append "$" for the Scala object
+    val clazz = Class.forName(objectClassName)
+    val instance = clazz.getField("MODULE$").get(null)
+    instance.asInstanceOf[ValidPhasePlugin[Input, Output]]
+  }
+
+  private def runValidationPipeline(phases: List[PhaseConfig[_, _]], initialAst: Any, errors: mutable.ListBuffer[CompilationMessage]): (TypedAst.Root, mutable.ListBuffer[CompilationMessage]) = {
+    var currentResult = initialAst
+
+    for (phase <- phases) {
+      println(s"Running phase: ${phase.pluginNames.mkString(", ")} on ${phase.inputType}")
+
+      for (pluginName <- phase.pluginNames) {
+        val result = runPlugin(pluginName, currentResult, errors)
+        currentResult = result
+      }
+    }
+
+    (currentResult.asInstanceOf[TypedAst.Root], errors)
+  }
+
+  private def runPlugin(pluginName: String, currentResult: Any, errors: mutable.ListBuffer[CompilationMessage]): Any = {
+    loadValidPlugin(pluginName) match
+      case pluginWithCache: ValidWithCachePhasePlugin[Any, Any] =>
+        pluginWithCache.runWithCache(loadValidPlugin(pluginName).convertInputType(currentResult), pluginWithCache.getCache(validationCache), changeSet)(this, errors)
+      case plugin: ValidPhasePlugin[Any, Any] =>
+        plugin.run(plugin.convertInputType(currentResult))(this, errors)
+  }
   /**
     * Compiles the Flix program and returns a typed ast.
     * If the list of [[CompilationMessage]]s is empty, then the root is always `Some(root)`.
@@ -517,7 +562,7 @@ class Flix {
     // Hence if a file contains an error it will be recompiled -- giving it a chance to disappear.
     for (e <- cachedErrors) {
       val i = e.loc.sp1.source.input
-      changeSet = changeSet.markChanged(i, cachedTyperAst.dependencyGraph)
+      changeSet = changeSet.markChanged(i, validationCache("TypedAst.Root").asInstanceOf[TypedAst.Root].dependencyGraph)
     }
 
     // The default entry point
@@ -549,7 +594,7 @@ class Flix {
         val (afterNamer, nameErrors) = Namer.run(afterDesugar)
         errors ++= nameErrors
 
-        val (resolverValidation, resolutionErrors) = Resolver.run(afterNamer, cachedResolverAst, changeSet)
+        val (resolverValidation, resolutionErrors) = Resolver.run(afterNamer, validationCache("ResolvedAst.Root").asInstanceOf[ResolvedAst.Root], changeSet)
         errors ++= resolutionErrors
 
         resolverValidation match {
@@ -558,14 +603,18 @@ class Flix {
             None
 
           case Validation.Success(afterResolver) =>
+            val configFilePath = "valid.conf" // Path to pipeline configuration
+            val phases = parseConfig(configFilePath)
 
-            val (afterKinder, kindErrors) = Kinder.run(afterResolver, cachedKinderAst, changeSet)
+            val (result, errs) = runValidationPipeline(phases, afterResolver, errors)
+/*
+            val (afterKinder, kindErrors) = Kinder.runWithCache(afterResolver, cachedKinderAst, changeSet)
             errors ++= kindErrors
 
             val (afterDeriver, derivationErrors) = Deriver.run(afterKinder)
             errors ++= derivationErrors
 
-            val (afterTyper, typeErrors) = Typer.run(afterDeriver, cachedTyperAst, changeSet)
+            val (afterTyper, typeErrors) = Typer.runWithCache(afterDeriver, cachedTyperAst, changeSet)
             errors ++= typeErrors
 
             EffectVerifier.run(afterTyper)
@@ -576,7 +625,7 @@ class Flix {
             val (afterEntryPoint, entryPointErrors) = EntryPoints.run(afterRegions)
             errors ++= entryPointErrors
 
-            val (afterInstances, instanceErrors) = Instances.run(afterEntryPoint, cachedTyperAst, changeSet)
+            val (afterInstances, instanceErrors) = Instances.runWithCache(afterEntryPoint, cachedTyperAst, changeSet)
             errors ++= instanceErrors
 
             val (afterPredDeps, predDepErrors) = PredDeps.run(afterInstances)
@@ -594,22 +643,22 @@ class Flix {
             val (afterSafety, safetyErrors) = Safety.run(afterRedundancy)
             errors ++= safetyErrors
 
-            val (afterDependencies, _) = Dependencies.run(afterSafety)
-
+            val (result, _) = Dependencies.run(afterSafety)
+*/
             if (options.incremental) {
               this.cachedLexerTokens = afterLexer
               this.cachedParserCst = afterParser
               this.cachedWeederAst = afterWeeder
               this.cachedDesugarAst = afterDesugar
-              this.cachedKinderAst = afterKinder
-              this.cachedResolverAst = afterResolver
-              this.cachedTyperAst = afterDependencies
+//              validationCache("KinderAst.Root") = afterKinder
+              validationCache("ResolvedAst.Root") = afterResolver
+              validationCache("TypedAst.Root") = result
 
               // We save all the current errors.
-              this.cachedErrors = errors.toList
+              this.cachedErrors = errs.toList
             }
 
-            Some(afterDependencies)
+            Some(result)
         }
     }
     // Shutdown fork-join thread pool.
@@ -634,30 +683,19 @@ class Flix {
       throw ex
   }
 
-  case class PhaseConfig[Input, Output](inputType: String, outputType: String, pluginNames: List[String])
-
-  def parseConfig(resourcePath: String): List[PhaseConfig[_, _]] = {
-    val lines = scala.io.Source.fromResource(resourcePath).getLines()
-    lines.map { line =>
-      val Array(inputType, plugins) = line.split(":").map(_.trim)
-      val pluginNames = plugins.split(",").map(_.trim).toList
-      PhaseConfig(inputType, inputType, pluginNames)
-    }.toList
-  }
-
-  def loadPlugin[Input, Output](className: String): CompilerPlugin[Input, Output] = {
+  private def loadCompilerPlugin[Input, Output](className: String): CompilerPlugin[Input, Output] = {
     val clazz = Class.forName(className)
     clazz.getDeclaredConstructor().newInstance().asInstanceOf[CompilerPlugin[Input, Output]]
   }
 
-  def runPipeline(phases: List[PhaseConfig[_, _]], initialAst: Any): CompilationResult = {
+  private def runCompilationPipeline(phases: List[PhaseConfig[_, _]], initialAst: Any): CompilationResult = {
     var currentAst = initialAst
 
     for (phase <- phases) {
       println(s"Running phase: ${phase.pluginNames.mkString(", ")} on ${phase.inputType}")
 
       for (pluginName <- phase.pluginNames) {
-        val plugin = loadPlugin(pluginName)
+        val plugin = loadCompilerPlugin(pluginName)
         currentAst = plugin.run(plugin.convertInputType(currentAst))(this)
       }
     }
@@ -678,7 +716,7 @@ class Flix {
     val configFilePath = "phases.conf" // Path to pipeline configuration
     val phases = parseConfig(configFilePath)
 
-    val result = runPipeline(phases, typedAst)
+    val result = runCompilationPipeline(phases, typedAst)
 
     // Shutdown fork-join thread pool.
     shutdownForkJoinPool()

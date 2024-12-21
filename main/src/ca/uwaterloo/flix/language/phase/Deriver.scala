@@ -16,6 +16,7 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.ast.shared.SymUse.*
 import ca.uwaterloo.flix.language.ast.{Kind, KindedAst, Name, Scheme, SemanticOp, SourceLocation, Symbol, Type, TypeConstructor}
@@ -25,6 +26,7 @@ import ca.uwaterloo.flix.language.phase.util.PredefinedTraits
 import ca.uwaterloo.flix.util.ParOps
 
 import java.util.concurrent.ConcurrentLinkedQueue
+import scala.collection.mutable
 import scala.jdk.CollectionConverters.*
 
 /**
@@ -33,7 +35,8 @@ import scala.jdk.CollectionConverters.*
   * No errors are thrown in this phase: constructed instances must be well-formed.
   * Errors with overlapping instances or unfulfilled type constraints must be caught in later phases.
   */
-object Deriver {
+object Deriver extends ValidPhasePlugin[KindedAst.Root, KindedAst.Root] {
+  override def name: String = "Deriver"
 
   // We don't use regions, so we are safe to use the global scope everywhere in this phase.
   private implicit val S: Scope = Scope.Top
@@ -46,7 +49,7 @@ object Deriver {
 
   val DerivableSyms: List[Symbol.TraitSym] = List(EqSym, OrderSym, ToStringSym, HashSym, CoerceSym)
 
-  def run(root: KindedAst.Root)(implicit flix: Flix): (KindedAst.Root, List[DerivationError]) = flix.phaseNew("Deriver") {
+  override def run(root: KindedAst.Root)(implicit flix: Flix, errors: mutable.ListBuffer[CompilationMessage]): KindedAst.Root = {
     implicit val sctx: SharedContext = SharedContext.mk()
     val derivedInstances = ParOps.parMap(root.enums.values)(getDerivedInstances(_, root)).flatten
     val newInstances = derivedInstances.foldLeft(root.instances) {
@@ -54,7 +57,8 @@ object Deriver {
         val accInsts = acc.getOrElse(inst.trt.sym, Nil)
         acc + (inst.trt.sym -> (inst :: accInsts))
     }
-    (root.copy(instances = newInstances), sctx.errors.asScala.toList)
+    errors ++= sctx.errors.asScala.toList
+    root.copy(instances = newInstances)
   }
 
   /**

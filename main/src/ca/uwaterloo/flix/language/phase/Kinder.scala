@@ -17,6 +17,7 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.*
 import ca.uwaterloo.flix.language.ast.Kind.WildCaseSet
 import ca.uwaterloo.flix.language.ast.shared.SymUse.{DefSymUse, SigSymUse}
@@ -29,6 +30,7 @@ import ca.uwaterloo.flix.util.{InternalCompilerException, ParOps}
 
 import java.util.concurrent.ConcurrentLinkedQueue
 import scala.collection.immutable.SortedSet
+import scala.collection.mutable
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 /**
@@ -57,9 +59,11 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
   * In inferring types, variable type constructors are assumed to have kind * -> * -> * -> ???.
   *
   */
-object Kinder {
+object Kinder extends ValidWithCachePhasePlugin[ResolvedAst.Root, KindedAst.Root] {
+  override def name: String = "Kinder"
+  override def cacheKey: String = "KindedAst.Root"
 
-  def run(root: ResolvedAst.Root, oldRoot: KindedAst.Root, changeSet: ChangeSet)(implicit flix: Flix): (KindedAst.Root, List[KindError]) = flix.phaseNew("Kinder") {
+  override def runWithCache(root: ResolvedAst.Root, oldRoot: KindedAst.Root, changeSet: ChangeSet)(implicit flix: Flix, errors: mutable.ListBuffer[CompilationMessage]): KindedAst.Root = {
     implicit val sctx: SharedContext = SharedContext.mk()
 
     // Type aliases must be processed first in order to provide a `taenv` for looking up type alias symbols.
@@ -81,7 +85,8 @@ object Kinder {
 
     val newRoot = KindedAst.Root(traits, instances, defs, enums, structs, restrictableEnums, effects, taenv, root.uses, root.mainEntryPoint, root.sources, root.availableClasses)
 
-    (newRoot, sctx.errors.asScala.toList)
+    errors ++= sctx.errors.asScala.toList
+    newRoot
   }
 
   /**

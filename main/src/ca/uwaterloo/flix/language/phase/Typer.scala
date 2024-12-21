@@ -16,6 +16,7 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.{Flix, FlixEvent}
+import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.*
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.dbg.AstPrinter.*
@@ -26,14 +27,17 @@ import ca.uwaterloo.flix.util.*
 import ca.uwaterloo.flix.util.collection.ListMap
 
 import java.util.concurrent.ConcurrentLinkedQueue
+import scala.collection.mutable
 import scala.jdk.CollectionConverters.*
 
-object Typer {
+object Typer extends ValidWithCachePhasePlugin[KindedAst.Root, TypedAst.Root] {
+  override def name: String = "Typer"
+  override def cacheKey: String = "TypedAst.Root"
 
   /**
     * Type checks the given AST root.
     */
-  def run(root: KindedAst.Root, oldRoot: TypedAst.Root, changeSet: ChangeSet)(implicit flix: Flix): (TypedAst.Root, List[TypeError]) = flix.phaseNew("Typer") {
+  override def runWithCache(root: KindedAst.Root, oldRoot: TypedAst.Root, changeSet: ChangeSet)(implicit flix: Flix, errors: mutable.ListBuffer[CompilationMessage]): TypedAst.Root = {
     implicit val sctx: SharedContext = SharedContext.mk()
 
     val traitEnv = mkTraitEnv(root.traits, root.instances)
@@ -53,8 +57,8 @@ object Typer {
 
     val result = TypedAst.Root(modules, traits, instances.m, sigs, defs, enums, structs, restrictableEnums, effs, typeAliases, root.uses, root.mainEntryPoint, None, root.sources, traitEnv.toMap, eqEnv, root.availableClasses, precedenceGraph, DependencyGraph.empty)
 
-    (result, sctx.errors.asScala.toList)
-
+    errors ++= sctx.errors.asScala.toList
+    result
   }
 
   /**

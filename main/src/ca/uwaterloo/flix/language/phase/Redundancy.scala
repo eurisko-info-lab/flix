@@ -16,6 +16,7 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.TypedAst.*
 import ca.uwaterloo.flix.language.ast.TypedAst.Predicate.{Body, Head}
 import ca.uwaterloo.flix.language.ast.ops.TypedAstOps
@@ -46,12 +47,13 @@ import scala.collection.mutable.ListBuffer
   *
   * The phase performs no AST rewrites; it can be disabled without affecting the runtime semantics.
   */
-object Redundancy {
+object Redundancy extends ValidPhasePlugin[Root, Root] {
+  override def name: String = "Redundancy"
 
   /**
     * Checks the given AST `root` for redundancies.
     */
-  def run(root: Root)(implicit flix: Flix): (Root, List[RedundancyError]) = flix.phaseNew("Redundancy") {
+  override def run(root: Root)(implicit flix: Flix, errors: mutable.ListBuffer[CompilationMessage]): Root = {
     implicit val sctx: SharedContext = SharedContext.mk()
 
     val errorsFromDefs = ParOps.parAgg(root.defs, Used.empty)({
@@ -67,7 +69,7 @@ object Redundancy {
     }, _ ++ _).errors.toList
 
     // Check for unused symbols.
-    val errors = errorsFromDefs ++
+    val errs = errorsFromDefs ++
       errorsFromInst ++
       errorsFromSigs ++
       checkUnusedDefs()(sctx, root) ++
@@ -78,7 +80,8 @@ object Redundancy {
       checkUnusedTypeParamsStructs()(root) ++
       checkRedundantTraitConstraints()(root, flix)
 
-    (root, errors)
+    errors ++= errs
+    root
   }
 
   /**

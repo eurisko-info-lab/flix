@@ -16,6 +16,7 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.ops.TypedAstOps
 import ca.uwaterloo.flix.language.ast.shared.{Instance, Scope}
 import ca.uwaterloo.flix.language.ast.{ChangeSet, RigidityEnv, Scheme, Symbol, Type, TypeConstructor, TypedAst}
@@ -25,7 +26,11 @@ import ca.uwaterloo.flix.language.phase.unification.*
 import ca.uwaterloo.flix.util.collection.ListOps
 import ca.uwaterloo.flix.util.{InternalCompilerException, ParOps, Result}
 
-object Instances {
+import scala.collection.mutable
+
+object Instances extends ValidWithCachePhasePlugin[TypedAst.Root, TypedAst.Root] {
+  override def name: String = "Instances"
+  override def cacheKey: String = "TypedAst.Root"
 
   // We use top scope everywhere here since we are only looking at declarations.
   private implicit val S: Scope = Scope.Top
@@ -33,10 +38,10 @@ object Instances {
   /**
     * Validates instances and traits in the given AST root.
     */
-  def run(root: TypedAst.Root, oldRoot: TypedAst.Root, changeSet: ChangeSet)(implicit flix: Flix): (TypedAst.Root, List[InstanceError]) =
-    flix.phaseNew("Instances") {
-      val errors = visitInstances(root, oldRoot, changeSet) ::: visitTraits(root)
-      (root, errors)
+  override def runWithCache(root: TypedAst.Root, oldRoot: TypedAst.Root, changeSet: ChangeSet)(implicit flix: Flix, errors: mutable.ListBuffer[CompilationMessage]): TypedAst.Root = {
+      val errs = visitInstances(root, oldRoot, changeSet) ::: visitTraits(root)
+      errors ++= errs
+      root
     }
 
   /**

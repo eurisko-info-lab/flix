@@ -25,6 +25,7 @@ import ca.uwaterloo.flix.language.phase.unification.Substitution
 import ca.uwaterloo.flix.util.{InternalCompilerException, ParOps, Validation}
 
 import scala.collection.immutable.SortedSet
+import scala.collection.mutable
 
 /**
   * The region phase ensures that regions do not escape outside of their scope.
@@ -32,14 +33,17 @@ import scala.collection.immutable.SortedSet
   * It does so by keep tracking of every region variable in scope and ensure that every
   * rigid Boolean type variable that occurs anywhere belongs is in scope.
   */
-object Regions {
+object Regions extends ValidPhasePlugin[Root, Root] {
+  override def name: String = "Regions"
 
-  def run(root: Root)(implicit flix: Flix): (Root, List[TypeError]) = flix.phaseNew("Regions") {
+  override def run(root: Root)(implicit flix: Flix, errors: mutable.ListBuffer[CompilationMessage]): Root = {
     val defErrors = ParOps.parMap(root.defs)(kv => visitDef(kv._2)).flatten
     val sigErrors = ParOps.parMap(root.sigs)(kv => visitSig(kv._2)).flatten
     val instanceErrors = ParOps.parMap(root.instances)(kv => kv._2.flatMap(visitInstance)).flatten
-    val errors = defErrors ++ sigErrors ++ instanceErrors
-    (root, errors.toList)
+    val errs = defErrors ++ sigErrors ++ instanceErrors
+
+    errors ++= errs.toList
+    root
   }
 
   private def visitDef(def0: Def)(implicit flix: Flix): List[TypeError.RegionVarEscapes] =

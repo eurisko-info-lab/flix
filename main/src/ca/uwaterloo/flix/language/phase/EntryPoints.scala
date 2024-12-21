@@ -16,6 +16,7 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.ast.shared.SymUse.DefSymUse
 import ca.uwaterloo.flix.language.ast.{Scheme, SourceLocation, Symbol, Type, TypeConstructor, TypedAst}
@@ -48,19 +49,21 @@ import scala.jdk.CollectionConverters.*
   *     its return type is not Unit.
   *   - Compute the set of all entry points and store it in Root.
   */
-object EntryPoints {
+object EntryPoints extends ValidPhasePlugin[TypedAst.Root, TypedAst.Root] {
+  override def name: String = "EntryPoints"
 
   // We don't use regions, so we are safe to use the global scope everywhere in this phase.
   private implicit val S: Scope = Scope.Top
 
-  def run(root: TypedAst.Root)(implicit flix: Flix): (TypedAst.Root, List[EntryPointError]) = flix.phaseNew("EntryPoints") {
+  override def run(root: TypedAst.Root)(implicit flix: Flix, errors: mutable.ListBuffer[CompilationMessage]): TypedAst.Root = {
     val (root1, errs1) = resolveMain(root)
     val (root2, errs2) = CheckEntryPoints.run(root1)
     // WrapMain assumes a sensible main, so CheckEntryPoints must run first.
     val (root3, errs3) = WrapMain.run(root2)
     // WrapMain might change main, so FindEntryPoints must be after.
     val root4 = findEntryPoints(root3)
-    (root4, errs1 ++ errs2 ++ errs3)
+    errors ++= errs1 ++ errs2 ++ errs3
+    root4
   }
 
   /**

@@ -17,6 +17,7 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.*
 import ca.uwaterloo.flix.language.ast.TypedAst.{Expr, ParYieldFragment, Pattern, Root}
 import ca.uwaterloo.flix.language.ast.shared.Constant
@@ -25,6 +26,8 @@ import ca.uwaterloo.flix.language.ast.shared.SymUse.CaseSymUse
 import ca.uwaterloo.flix.language.dbg.AstPrinter.*
 import ca.uwaterloo.flix.language.errors.NonExhaustiveMatchError
 import ca.uwaterloo.flix.util.{InternalCompilerException, ParOps, Validation}
+
+import scala.collection.mutable
 
 /**
   * The Pattern Exhaustiveness phase checks pattern matches for exhaustiveness
@@ -40,7 +43,8 @@ import ca.uwaterloo.flix.util.{InternalCompilerException, ParOps, Validation}
   * pattern match and returns the result.
   *
   */
-object PatMatch {
+object PatMatch extends ValidPhasePlugin[Root, Root] {
+  override def name: String = "PatMatch"
 
   /**
     * An ADT to make matching Type Constructors easier. We need to
@@ -109,8 +113,7 @@ object PatMatch {
   /**
     * Returns an error message if a pattern match is not exhaustive
     */
-  def run(root: TypedAst.Root)(implicit flix: Flix): (Root, List[NonExhaustiveMatchError]) =
-    flix.phaseNew("PatMatch") {
+  override def run(root: TypedAst.Root)(implicit flix: Flix, errors: mutable.ListBuffer[CompilationMessage]): Root = {
       implicit val r: TypedAst.Root = root
 
       val classDefExprs = root.traits.values.flatMap(_.sigs).flatMap(_.exp)
@@ -121,9 +124,10 @@ object PatMatch {
       // Only need to check sigs with implementations
       val sigsErrs = root.sigs.values.flatMap(_.exp).flatMap(visitExp)
 
-      val errors = classDefErrs ++ defErrs ++ instanceDefErrs ++ sigsErrs
+      val errs = classDefErrs ++ defErrs ++ instanceDefErrs ++ sigsErrs
 
-      (root, errors.toList)
+      errors ++= errs.toList
+      root
     }
 
   /**

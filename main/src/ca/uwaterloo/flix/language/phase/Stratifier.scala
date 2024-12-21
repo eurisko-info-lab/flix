@@ -17,6 +17,7 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.*
 import ca.uwaterloo.flix.language.ast.TypedAst.*
 import ca.uwaterloo.flix.language.ast.shared.LabelledPrecedenceGraph.{Label, LabelledEdge}
@@ -30,6 +31,7 @@ import ca.uwaterloo.flix.util.{ParOps, Result}
 
 import java.util.concurrent.ConcurrentLinkedQueue
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.jdk.CollectionConverters.*
 
 /**
@@ -44,11 +46,13 @@ import scala.jdk.CollectionConverters.*
   *
   * Reports a [[StratificationError]] if the constraints cannot be stratified.
   */
-object Stratifier {
+object Stratifier extends ValidPhasePlugin[Root, Root] {
+  override def name: String = "Stratifier"
+
   /**
     * Returns a stratified version of the given AST `root`.
     */
-  def run(root: Root)(implicit flix: Flix): (Root, List[StratificationError]) = flix.phaseNew("Stratifier") {
+  override def run(root: Root)(implicit flix: Flix, errors: mutable.ListBuffer[CompilationMessage]): Root = {
     // Construct a new shared context.
     implicit val sctx: SharedContext = SharedContext.mk()
 
@@ -60,7 +64,8 @@ object Stratifier {
     val is = ParOps.parMapValues(root.instances)(is0 => is0.map(visitInstance))
     val ts = ParOps.parMapValues(root.traits)(visitTrait)
 
-    (root.copy(defs = ds, instances = is, traits = ts), sctx.errors.asScala.toList)
+    errors ++= sctx.errors.asScala.toList
+    root.copy(defs = ds, instances = is, traits = ts)
   }
 
   /**
