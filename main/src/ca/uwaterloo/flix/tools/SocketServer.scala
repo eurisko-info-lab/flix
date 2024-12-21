@@ -24,6 +24,7 @@ import ca.uwaterloo.flix.util.*
 import org.java_websocket.WebSocket
 import org.java_websocket.handshake.ClientHandshake
 import org.java_websocket.server.WebSocketServer
+
 import org.json4s.JsonAST.*
 import org.json4s.jvalue2monadic
 import org.json4s.ParserUtil.ParseException

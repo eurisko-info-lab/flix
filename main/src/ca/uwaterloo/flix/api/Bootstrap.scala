@@ -36,7 +36,6 @@ import scala.collection.mutable
 import scala.io.StdIn.readLine
 import scala.util.{Failure, Success, Using}
 
-
 object Bootstrap {
 
   /**
@@ -203,12 +202,7 @@ object Bootstrap {
   /**
     * Returns `true` if the given path `p` is a jar-file.
     */
-  private def isJarFile(p: Path): Boolean = p.getFileName.toString.endsWith(".jar") && isZipArchive(p)
-
-  /**
-    * Returns `true` if the given path `p` is a fpkg-file.
-    */
-  def isPkgFile(p: Path): Boolean = p.getFileName.toString.endsWith(".fpkg") && isZipArchive(p)
+  private def isJarFile(p: Path): Boolean = p.getFileName.toString.endsWith(".jar") && BaseBootstrap.isZipArchive(p)
 
   /**
     * Creates a new directory at the given path `p`.
@@ -260,24 +254,6 @@ object Bootstrap {
     zip.putNextEntry(entry)
     zip.write(d)
     zip.closeEntry()
-  }
-
-  /**
-    * Returns `true` if the given path `p` is a zip-archive.
-    */
-  private def isZipArchive(p: Path): Boolean = {
-    if (Files.exists(p) && Files.isReadable(p) && Files.isRegularFile(p)) {
-      // Read the first four bytes of the file.
-      return Using(Files.newInputStream(p)) { is =>
-        val b1 = is.read()
-        val b2 = is.read()
-        val b3 = is.read()
-        val b4 = is.read()
-        // Check if the four first bytes match 0x50, 0x4b, 0x03, 0x04
-        return b1 == 0x50 && b2 == 0x4b && b3 == 0x03 && b4 == 0x04
-      }.get
-    }
-    false
   }
 
   /**
@@ -644,7 +620,7 @@ class Bootstrap(val projectPath: Path, apiKey: Option[String]) {
     val pkgFile = Bootstrap.getPkgFile(projectPath)
 
     // Check whether it is safe to write to the file.
-    if (Files.exists(pkgFile) && !Bootstrap.isPkgFile(pkgFile)) {
+    if (Files.exists(pkgFile) && !BaseBootstrap.isPkgFile(pkgFile)) {
       return Validation.Failure(BootstrapError.FileError(s"The path '${formatter.red(pkgFile.toString)}' exists and is not a fpkg-file. Refusing to overwrite."))
     }
 

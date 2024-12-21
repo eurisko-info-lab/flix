@@ -1,0 +1,61 @@
+plugins {
+    id 'scala'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(':core')
+
+    implementation 'org.scala-lang:scala3-library_3:3.6.2!!'
+
+    // Java implementation of LSP.
+    implementation 'org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1'
+
+    implementation('org.java-websocket:Java-WebSocket:1.6.0')
+    implementation('org.json4s:json4s-native_3:4.0.7')
+    implementation("com.lihaoyi:sourcecode_3:0.4.2")
+
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.withType(ScalaCompile).configureEach {
+    scalaCompileOptions.forkOptions.with {
+        memoryMaximumSize = '1536m'
+    }
+    scalaCompileOptions.additionalParameters = [
+            "-Ypatmat-exhaust-depth", "400",
+            "-release", "21",
+            "-opt:inline:ca.uwaterloo.**",
+            "-Xmixin-force-forwarders:false",   // Required for LSP4j
+            "-Xsource:3",                       // Scala 3 migration flag
+            "-Ytasty-reader"                    // Scala 3 migration flag
+    ]
+    compileScala.sourceCompatibility = 21
+    compileScala.targetCompatibility = 21
+}
+
+sourceSets {
+    main {
+        scala {
+            srcDirs = ['main/src']
+        }
+
+        resources {
+            srcDirs = ['main/src/resources']
+        }
+    }
+    test {
+        scala {
+            srcDirs = ['main/test']
+        }
+    }
+}
+
