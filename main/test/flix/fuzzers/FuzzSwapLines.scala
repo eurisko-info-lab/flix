@@ -17,10 +17,11 @@ package flix.fuzzers
 
 import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.ast.shared.SecurityContext
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.nio.file.{Files, Paths}
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 class FuzzSwapLines extends AnyFunSuite with TestUtils {
 
@@ -30,22 +31,22 @@ class FuzzSwapLines extends AnyFunSuite with TestUtils {
   // Assuming each take 1sec to run that ends up at 1.3 hours.
   // Instead we select numSwapLines and try to swap those with each-other.
   // For instance numSwapLines = 10 gives a total of 330 swaps per file.
-  private val numSwapLines = 5
+  private val numSwapLines = 15
 
   test("simple-card-game") {
-    val filepath = Paths.get("examples/simple-card-game.flix")
-    val lines = Files.lines(filepath)
-    compileWithSwappedLines(filepath.getFileName.toString, lines)
-  }
-
-  test("using-channels-and-select") {
-    val filepath = Paths.get("examples/using-channels-and-select.flix")
+    val filepath = Paths.get("examples/larger-examples/simple-card-game.flix")
     val lines = Files.lines(filepath)
     compileWithSwappedLines(filepath.getFileName.toString, lines)
   }
 
   test("the-ast-typing-problem-with-polymorphic-records") {
-    val filepath = Paths.get("examples/the-ast-typing-problem-with-polymorphic-records.flix")
+    val filepath = Paths.get("examples/records/the-ast-typing-problem-with-polymorphic-records.flix")
+    val lines = Files.lines(filepath)
+    compileWithSwappedLines(filepath.getFileName.toString, lines)
+  }
+
+  test("ford-fulkerson") {
+    val filepath = Paths.get("examples/larger-examples/datalog/ford-fulkerson.flix")
     val lines = Files.lines(filepath)
     compileWithSwappedLines(filepath.getFileName.toString, lines)
   }
@@ -69,7 +70,7 @@ class FuzzSwapLines extends AnyFunSuite with TestUtils {
       for (j <- i + 1 until numSwapLinesFixed) {
         val jStepped = Math.min(j * step, numLines)
         val src = lines.updated(iStepped, lines(jStepped)).updated(jStepped, lines(iStepped)).mkString("\n")
-        flix.addSourceCode(s"$name-swap-lines-$iStepped-and-$jStepped", src)
+        flix.addSourceCode(s"$name-swap-lines-$iStepped-and-$jStepped", src)(SecurityContext.AllPermissions)
         flix.compile() // We simply care that this does not crash.
       }
     }

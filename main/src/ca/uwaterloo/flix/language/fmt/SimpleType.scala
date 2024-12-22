@@ -15,7 +15,9 @@
  */
 package ca.uwaterloo.flix.language.fmt
 
-import ca.uwaterloo.flix.language.ast._
+import ca.uwaterloo.flix.language.ast.*
+import ca.uwaterloo.flix.language.ast.Type.JvmMember
+import ca.uwaterloo.flix.language.ast.shared.VarText
 import ca.uwaterloo.flix.util.InternalCompilerException
 
 /**
@@ -75,9 +77,9 @@ object SimpleType {
 
   case object Array extends SimpleType
 
-  case object Vector extends SimpleType
+  case object ArrayWithoutRegion extends SimpleType
 
-  case object Ref extends SimpleType
+  case object Vector extends SimpleType
 
   case object Sender extends SimpleType
 
@@ -94,6 +96,8 @@ object SimpleType {
   case object True extends SimpleType
 
   case object Region extends SimpleType
+
+  case object RegionWithoutRegion extends SimpleType
 
   //////////
   // Records
@@ -197,9 +201,14 @@ object SimpleType {
   case class Intersection(tpes: List[SimpleType]) extends SimpleType
 
   /**
-    * Difference of two types.
+    * A chain of types connected by `⊕`.
     */
-  case class Difference(tpe1: SimpleType, tpe2: SimpleType) extends SimpleType
+  case class SymmetricDiff(tpes: List[SimpleType]) extends SimpleType
+
+  /**
+    * A chain of types connected by `-`.
+    */
+  case class Difference(tpes: List[SimpleType]) extends SimpleType
 
   /////////////
   // Predicates
@@ -233,11 +242,37 @@ object SimpleType {
     */
   case class PolyArrow(arg: SimpleType, eff: SimpleType, ret: SimpleType) extends SimpleType
 
+  /**
+    * A backend function (no effect).
+    */
+  case class ArrowWithoutEffect(arg: SimpleType, ret: SimpleType) extends SimpleType
+
   ///////
   // Tags
   ///////
 
   case class TagConstructor(name: String) extends SimpleType
+
+  ////////////
+  // JVM Types
+  ////////////
+
+  case class JvmToType(tpe: SimpleType) extends SimpleType
+
+  case class JvmToEff(tpe: SimpleType) extends SimpleType
+
+  case class JvmConstructor(name: String, tpes: List[SimpleType]) extends SimpleType
+
+  case class JvmField(tpe: SimpleType, name: String) extends SimpleType
+
+  case class JvmMethod(tpe: SimpleType, name: String, tpes: List[SimpleType]) extends SimpleType
+
+  case class JvmStaticMethod(clazz: String, name: String, tpes: List[SimpleType]) extends SimpleType
+
+  /**
+    * A field type.
+    */
+  case class FieldType(tpe: SimpleType) extends SimpleType
 
   //////////////////////
   // Miscellaneous Types
@@ -256,12 +291,13 @@ object SimpleType {
   /**
     * A type variable.
     */
-  case class Var(id: Int, kind: Kind, isRegion: Boolean, text: Ast.VarText) extends SimpleType
+  case class Var(id: Int, kind: Kind, isRegion: Boolean, text: VarText) extends SimpleType
 
   /**
     * A tuple.
     */
-  case class Tuple(elms: List[SimpleType]) extends SimpleType
+  case class Tuple(tpes: List[SimpleType]) extends SimpleType
+
 
   /**
     * An error type.
@@ -311,6 +347,16 @@ object SimpleType {
         mkApply(Name(cst.sym.name), (args ++ t.typeArguments).map(visit))
       case Type.AssocType(cst, arg, _, _) =>
         mkApply(Name(cst.sym.name), (arg :: t.typeArguments).map(visit))
+      case Type.JvmToType(tpe, _) =>
+        mkApply(SimpleType.JvmToType(visit(tpe)), t.typeArguments.map(visit))
+      case Type.JvmToEff(tpe, _) =>
+        mkApply(SimpleType.JvmToEff(visit(tpe)), t.typeArguments.map(visit))
+      case Type.UnresolvedJvmType(member, _) => member match {
+        case JvmMember.JvmConstructor(clazz, tpes) => SimpleType.JvmConstructor(clazz.getSimpleName, tpes.map(visit))
+        case JvmMember.JvmMethod(tpe, name, tpes) => SimpleType.JvmMethod(visit(tpe), name.name, tpes.map(visit))
+        case JvmMember.JvmField(_, tpe, name) => SimpleType.JvmField(visit(tpe), name.name)
+        case JvmMember.JvmStaticMethod(clazz, name, tpes) => SimpleType.JvmStaticMethod(clazz.getSimpleName, name.name, tpes.map(visit))
+      }
       case Type.Cst(tc, _) => tc match {
         case TypeConstructor.Void => Void
         case TypeConstructor.AnyType => AnyType
@@ -336,12 +382,12 @@ object SimpleType {
             case Nil =>
               val lastArrow: SimpleType = PolyArrow(Hole, Hole, Hole)
               // NB: safe to subtract 2 since arity is always at least 2
-              List.fill(arity - 2)(Hole).foldRight(lastArrow)(PureArrow)
+              List.fill(arity - 2)(Hole).foldRight(lastArrow)(PureArrow.apply)
 
             // Case 2: Pure function.
             case eff :: tpes if eff == Pure =>
               // NB: safe to reduce because arity is always at least 2
-              tpes.padTo(arity, Hole).reduceRight(PureArrow)
+              tpes.padTo(arity, Hole).reduceRight(PureArrow.apply)
 
             // Case 3: Impure function.
             case eff :: tpes =>
@@ -349,8 +395,12 @@ object SimpleType {
               val allTpes = tpes.padTo(arity, Hole)
               val List(lastArg, ret) = allTpes.takeRight(2)
               val lastArrow: SimpleType = PolyArrow(lastArg, eff, ret)
-              allTpes.dropRight(2).foldRight(lastArrow)(PureArrow)
+              allTpes.dropRight(2).foldRight(lastArrow)(PureArrow.apply)
           }
+
+        case TypeConstructor.ArrowWithoutEffect(arity) =>
+          val args = t.typeArguments.map(visit)
+          args.padTo(arity, Hole).reduceRight(ArrowWithoutEffect.apply)
 
         case TypeConstructor.RecordRowEmpty => RecordRow(Nil)
 
@@ -417,14 +467,18 @@ object SimpleType {
             case _ :: _ :: _ => throw new OverAppliedType(t.loc)
           }
         case TypeConstructor.Array => mkApply(Array, t.typeArguments.map(visit))
+        case TypeConstructor.ArrayWithoutRegion => mkApply(ArrayWithoutRegion, t.typeArguments.map(visit))
         case TypeConstructor.Vector => mkApply(Vector, t.typeArguments.map(visit))
         case TypeConstructor.Sender => mkApply(Sender, t.typeArguments.map(visit))
         case TypeConstructor.Receiver => mkApply(Receiver, t.typeArguments.map(visit))
         case TypeConstructor.Lazy => mkApply(Lazy, t.typeArguments.map(visit))
         case TypeConstructor.Enum(sym, _) => mkApply(Name(sym.name), t.typeArguments.map(visit))
+        case TypeConstructor.Struct(sym, _) => mkApply(Name(sym.name), t.typeArguments.map(visit))
         case TypeConstructor.RestrictableEnum(sym, _) => mkApply(Name(sym.name), t.typeArguments.map(visit))
         case TypeConstructor.Native(clazz) => Name(clazz.getName)
-        case TypeConstructor.Ref => mkApply(Ref, t.typeArguments.map(visit))
+        case TypeConstructor.JvmConstructor(constructor) => Name(constructor.getName)
+        case TypeConstructor.JvmMethod(method) => Name(method.getName)
+        case TypeConstructor.JvmField(field) => Name(field.getName)
         case TypeConstructor.Tuple(l) =>
           val tpes = t.typeArguments.map(visit).padTo(l, Hole)
           Tuple(tpes)
@@ -515,19 +569,37 @@ object SimpleType {
             case _ :: _ :: _ :: _ => throw new OverAppliedType(t.loc)
           }
 
+        case TypeConstructor.Difference =>
+          // collapse into a chain of differences
+          // take care not to change A - (B - C) into A - B - C
+          t.typeArguments.map(visit) match {
+            // Case 1: No args. ? - ?
+            case Nil => Difference(Hole :: Hole :: Nil)
+            // Case 2: One arg. Take the left and put a hole at the end: tpe1 - tpe2 - ?
+            case arg :: Nil => Difference(splitDifference(arg) :+ Hole)
+            // Case 3: Multiple args. Concatenate the left differences: tpe1 - tpe2 - tpe3 - tpe4
+            case arg1 :: arg2 :: Nil => Difference(splitDifference(arg1) :+ arg2)
+            // Case 4: Too many args. Error.
+            case _ :: _ :: _ :: _ => throw new OverAppliedType(t.loc)
+          }
+
+        case TypeConstructor.SymmetricDiff =>
+          val args = t.typeArguments.map(visit)
+          SymmetricDiff(args)
+
         case TypeConstructor.CaseSet(syms, _) =>
           val names = syms.toList.map(sym => SimpleType.Name(sym.name))
           val set = SimpleType.Union(names)
           mkApply(set, t.typeArguments.map(visit))
 
-        case TypeConstructor.CaseComplement(sym) =>
+        case TypeConstructor.CaseComplement(_) =>
           t.typeArguments.map(visit) match {
             case Nil => Complement(Hole)
             case arg :: Nil => Complement(arg)
             case _ :: _ :: _ => throw new OverAppliedType(t.loc)
           }
 
-        case TypeConstructor.CaseIntersection(sym) =>
+        case TypeConstructor.CaseIntersection(_) =>
           t.typeArguments.map(visit) match {
             case Nil => Intersection(Hole :: Hole :: Nil)
             case arg :: Nil => Intersection(arg :: Hole :: Nil)
@@ -535,7 +607,7 @@ object SimpleType {
             case _ => throw new OverAppliedType(t.loc)
           }
 
-        case TypeConstructor.CaseUnion(sym) =>
+        case TypeConstructor.CaseUnion(_) =>
           t.typeArguments.map(visit) match {
             case Nil => Plus(Hole :: Hole :: Nil)
             case arg :: Nil => Plus(arg :: Hole :: Nil)
@@ -545,8 +617,9 @@ object SimpleType {
 
         case TypeConstructor.Effect(sym) => mkApply(SimpleType.Name(sym.name), t.typeArguments.map(visit))
         case TypeConstructor.RegionToStar => mkApply(Region, t.typeArguments.map(visit))
+        case TypeConstructor.RegionWithoutRegion => mkApply(RegionWithoutRegion, t.typeArguments.map(visit))
 
-        case TypeConstructor.Error(_) => SimpleType.Error
+        case TypeConstructor.Error(_, _) => SimpleType.Error
       }
     }
 
@@ -656,15 +729,6 @@ object SimpleType {
 
   /**
     * Splits `t1 + t2` into `t1 :: t2 :: Nil`,
-    * and leaves non-union types as singletons.
-    */
-  private def splitUnions(tpe: SimpleType): List[SimpleType] = tpe match {
-    case Union(tpes) => tpes
-    case t => List(t)
-  }
-
-  /**
-    * Splits `t1 + t2` into `t1 :: t2 :: Nil`,
     * and leaves non-plus types as singletons.
     */
   private def splitPluses(tpe: SimpleType): List[SimpleType] = tpe match {
@@ -674,7 +738,7 @@ object SimpleType {
 
   /**
     * Splits `t1 & t2` into `t1 :: t2 :: Nil`,
-    * and leaves non-intersection types as singletons.
+    * and leaves other types as singletons.
     */
   private def splitIntersections(tpe: SimpleType): List[SimpleType] = tpe match {
     case Intersection(tpes) => tpes
@@ -682,13 +746,21 @@ object SimpleType {
   }
 
   /**
-    * Joins `t1 :: t2 :: Nil` into `t1 & t2`
-    * and leaves singletons as non-intersection types.
+    * Splits `t1 - t2` into `t1 :: t2 :: Nil`,
+    * and leaves other types as singletons.
     */
-  private def joinIntersection(tpes: List[SimpleType]): SimpleType = tpes match {
-    case Nil => throw InternalCompilerException("unexpected empty type list", SourceLocation.Unknown)
-    case t :: Nil => t
-    case ts => Intersection(ts)
+  private def splitDifference(tpe: SimpleType): List[SimpleType] = tpe match {
+    case Difference(tpes) => tpes
+    case t => List(t)
+  }
+
+  /**
+    * Splits `t1 ⊕ t2` into `t1 :: t2 :: Nil`,
+    * and leaves other types as singletons.
+    */
+  private def splitSymmetricDiff(tpe: SimpleType): List[SimpleType] = tpe match {
+    case SymmetricDiff(tpes) => tpes
+    case t => List(t)
   }
 
   /**

@@ -18,120 +18,96 @@ package ca.uwaterloo.flix.language.dbg
 
 import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.api.Flix.{IrFileExtension, IrFileIndentation, IrFileWidth}
-import ca.uwaterloo.flix.language.ast._
-import ca.uwaterloo.flix.language.dbg.printer._
-import ca.uwaterloo.flix.util.{FileOps, InternalCompilerException}
+import ca.uwaterloo.flix.language.ast.*
+import ca.uwaterloo.flix.language.dbg.printer.*
+import ca.uwaterloo.flix.util.tc.Debug
+import ca.uwaterloo.flix.util.{FileOps, Validation}
 
-import java.nio.file.{Files, LinkOption, Path}
+import java.nio.file.Path
 
 object AstPrinter {
 
-  /**
-    * Writes all the formatted asts, requested by the flix options, to disk.
-    */
-  def printAsts()(implicit flix: Flix): Unit = {
-    val optionPhases = flix.options.xprintphase
-    val shouldPrintEverything = optionPhases.contains("all") || optionPhases.contains("All")
-    val phaseMap = if (shouldPrintEverything) allPhases(includeUnfinished = false)
-                   else allPhases().filter(pair => optionPhases.contains(pair._1))
-    printPhaseMap(phaseMap)
+  case class DebugNoOp[T]() extends Debug[T] {
+    override val hasAst: Boolean = false
+
+    override def emit(phase: String, root: T)(implicit flix: Flix): Unit = ()
   }
 
-  /**
-    * Writes all the formatted asts to disk.
-    */
-  def printAllAsts()(implicit flix: Flix): Unit = {
-    printPhaseMap(allPhases(includeUnfinished = false))
+  implicit object DebugUnit extends DebugNoOp[Unit]
+
+  implicit object DebugSyntaxTree extends Debug[SyntaxTree.Root] {
+    override def emit(phase: String, root: SyntaxTree.Root)(implicit flix: Flix): Unit =
+      printDocProgram(phase, SyntaxTreePrinter.print(root))
   }
 
-  /**
-    * Goes through each map binding and calls [[writeToDisk]].
-    */
-  private def printPhaseMap(phaseMap: Map[String, () => String])(implicit flix: Flix): Unit = {
-    for ((phase, printer) <- phaseMap)
-      writeToDisk(phase, printer())
+  implicit object DebugWeededAst extends Debug[WeededAst.Root] {
+    override val hasAst: Boolean = false
+    override def emit(phase: String, root: WeededAst.Root)(implicit flix: Flix): Unit = ()
   }
 
-  /**
-    * Returns a list of map the phases of flix along with a thunked pretty printed AST.
-    *
-    * Returns only the phases that can be pretty printed if `includeUnfinished` is false.
-    */
-  def allPhases(includeUnfinished: Boolean = true)(implicit flix: Flix): Map[String, () => String] = {
-    def wipPhase(phaseName: String): Option[(String, () => String)] = {
-      if (includeUnfinished) Some((phaseName, () => "Work In Progress")) else None
-    }
-
-    val frontend = List(
-      wipPhase("Parser"),
-      wipPhase("Weeder"),
-      wipPhase("Desugar"),
-      wipPhase("Namer"),
-      wipPhase("Resolver"),
-      wipPhase("Kinder"),
-      wipPhase("Deriver"),
-      Some("Typer", () => formatTypedAst(flix.getTyperAst)),
-      wipPhase("Entrypoint"),
-      wipPhase("PredDeps"),
-      wipPhase("Stratifier"),
-      wipPhase("PatMatch"),
-      wipPhase("Redundancy"),
-      wipPhase("Safety")
-    ).flatten.toMap
-    val backend = List(
-      Some(("Lowering", () => formatLoweredAst(flix.getLoweringAst))),
-      Some(("TreeShaker1", () => formatLoweredAst(flix.getTreeShaker1Ast))),
-      wipPhase("Monomorpher"),
-      wipPhase("MonoTypes"),
-      Some(("Simplifier", () => formatSimplifiedAst(flix.getSimplifierAst))),
-      Some(("ClosureConv", () => formatSimplifiedAst(flix.getClosureConvAst))),
-      Some(("LambdaLift", () => formatLiftedAst(flix.getLambdaLiftAst))),
-      Some(("Optimizer", () => formatLiftedAst(flix.getOptimizerAst))),
-      Some(("TreeShaker2", () => formatLiftedAst(flix.getTreeShaker2Ast))),
-      Some(("EffectBinder", () => formatReducedAst(flix.getEffectBinderAst))),
-      Some(("TailPos", () => formatReducedAst(flix.getTailPosAst))),
-      Some(("Eraser", () => formatReducedAst(flix.getEraserAst))),
-      Some(("Reducer", () => formatReducedAst(flix.getReducerAst))),
-      Some(("VarOffsets", () => formatReducedAst(flix.getVarOffsetsAst))),
-      wipPhase("JvmBackend")
-    ).flatten.toMap
-    frontend ++ backend
+  implicit object DebugDesugaredAst extends Debug[DesugaredAst.Root] {
+    override val hasAst: Boolean = false
+    override def emit(phase: String, root: DesugaredAst.Root)(implicit flix: Flix): Unit = ()
   }
 
-  /**
-    * Formats `root` for display.
-    */
-  def formatTypedAst(root: TypedAst.Root): String = {
-    formatDocProgram(TypedAstPrinter.print(root))
+  implicit object DebugNamedAst extends Debug[NamedAst.Root] {
+    override val hasAst: Boolean = false
+    override def emit(phase: String, root: NamedAst.Root)(implicit flix: Flix): Unit = ()
   }
 
-
-  /**
-    * Formats `root` for display.
-    */
-  def formatLoweredAst(root: LoweredAst.Root): String = {
-    formatDocProgram(LoweredAstPrinter.print(root))
+  implicit object DebugResolvedAst extends Debug[ResolvedAst.Root] {
+    override def emit(phase: String, root: ResolvedAst.Root)(implicit flix: Flix): Unit =
+      printDocProgram(phase, ResolvedAstPrinter.print(root))
   }
 
-  /**
-    * Formats `root` for display.
-    */
-  def formatSimplifiedAst(root: SimplifiedAst.Root): String = {
-    formatDocProgram(SimplifiedAstPrinter.print(root))
+  implicit object DebugKindedAst extends Debug[KindedAst.Root] {
+    override val hasAst: Boolean = false
+    override def emit(phase: String, root: KindedAst.Root)(implicit flix: Flix): Unit = ()
   }
 
-  /**
-    * Formats `root` for display.
-    */
-  def formatLiftedAst(root: LiftedAst.Root): String = {
-    formatDocProgram(LiftedAstPrinter.print(root))
+  implicit object DebugTypedAst extends Debug[TypedAst.Root] {
+    override def emit(phase: String, root: TypedAst.Root)(implicit flix: Flix): Unit =
+      printDocProgram(phase, TypedAstPrinter.print(root))
   }
 
-  /**
-    * Formats `root` for display.
-    */
-  def formatReducedAst(root: ReducedAst.Root): String = {
-    formatDocProgram(ReducedAstPrinter.print(root))
+  implicit object DebugSimplifiedAst extends Debug[SimplifiedAst.Root] {
+    override def emit(phase: String, root: SimplifiedAst.Root)(implicit flix: Flix): Unit =
+      printDocProgram(phase, SimplifiedAstPrinter.print(root))
+  }
+
+  implicit object DebugLoweredAst extends Debug[LoweredAst.Root] {
+    override def emit(phase: String, root: LoweredAst.Root)(implicit flix: Flix): Unit =
+      printDocProgram(phase, LoweredAstPrinter.print(root))
+  }
+
+  implicit object DebugLiftedAst extends Debug[LiftedAst.Root] {
+    override def emit(phase: String, root: LiftedAst.Root)(implicit flix: Flix): Unit =
+      printDocProgram(phase, LiftedAstPrinter.print(root))
+  }
+
+  implicit object DebugMonoAst extends Debug[MonoAst.Root] {
+    override def emit(phase: String, root: MonoAst.Root)(implicit flix: Flix): Unit =
+      printDocProgram(phase, MonoAstPrinter.print(root))
+  }
+
+  implicit object DebugReducedAst extends Debug[ReducedAst.Root] {
+    override def emit(phase: String, root: ReducedAst.Root)(implicit flix: Flix): Unit =
+      printDocProgram(phase, ReducedAstPrinter.print(root))
+  }
+
+  case class DebugValidation[T, E]()(implicit d: Debug[T]) extends Debug[Validation[T, E]] {
+    override val hasAst: Boolean = d.hasAst
+
+    override def output(name: String, v: Validation[T, E])(implicit flix: Flix): Unit =
+      Validation.mapN(v) {
+        case x => d.output(name, x)
+      }
+
+    override def emit(name: String, a: Validation[T, E])(implicit flix: Flix): Unit = ()
+  }
+
+  private def printDocProgram(phase: String, dast: DocAst.Program)(implicit flix: Flix): Unit = {
+    writeToDisk(phase, formatDocProgram(dast))
   }
 
   /**
@@ -144,27 +120,41 @@ object AstPrinter {
   }
 
   /**
-    * Writes `content` to the file `./build/asts/<fileName>.flixir`. The build folder is taken from
+    * Writes `content` to the file `./build/asts/<phaseName>.flixir`. The build folder is taken from
     * flix options if present. The existing file is overwritten if present.
     */
-  private def writeToDisk(fileName: String, content: String)(implicit flix: Flix): Unit = {
-    val buildAstsPath = flix.options.output.getOrElse(Path.of("./build/")).resolve("asts/")
-    val filePath = buildAstsPath.resolve(s"$fileName.$IrFileExtension")
-    Files.createDirectories(buildAstsPath)
-
-    // Check if the file already exists.
-    if (Files.exists(filePath)) {
-      // Check that the file is a regular file.
-      if (!Files.isRegularFile(filePath, LinkOption.NOFOLLOW_LINKS)) {
-        throw InternalCompilerException(s"Unable to write to non-regular file: '$filePath'.", SourceLocation.Unknown)
-      }
-
-      // Check if the file is writable.
-      if (!Files.isWritable(filePath)) {
-        throw InternalCompilerException(s"Unable to write to read-only file: '$filePath'.", SourceLocation.Unknown)
-      }
-    }
+  private def writeToDisk(phaseName: String, content: String)(implicit flix: Flix): Unit = {
+    val filePath = phaseOutputPath(phaseName)
     FileOps.writeString(filePath, content)
   }
 
+  /** Makes sure that the phases file exists and is empty. */
+  def resetPhaseFile()(implicit flix: Flix): Unit = {
+    val filePath = astFolderPath.resolve("0phases.txt")
+    FileOps.writeString(filePath, "")
+  }
+
+  def appendPhaseToDisk(phaseName: String, hasAst: Boolean)(implicit flix: Flix): Unit = {
+    val filePath = astFolderPath.resolve("0phases.txt")
+    val line = s"$phaseName${if (hasAst) "" else " (no output)"}${System.lineSeparator()}"
+    FileOps.writeString(filePath, line, append = true)
+  }
+
+  /**
+    * Returns the path to the pretty printed output of `phaseName` used by [[writeToDisk]].
+    *
+    * OBS: this function has no checking so the path might not hold the ast and it might not be readable etc.
+    */
+  private def phaseOutputPath(phaseName: String)(implicit flix: Flix): Path = {
+    astFolderPath.resolve(s"$phaseName.$IrFileExtension")
+  }
+
+  /**
+    * Returns the path to the folder that holds the pretty printed ast files used by [[writeToDisk]].
+    *
+    * OBS: this function has no checking so the path might not exist and it might not be readable etc.
+    */
+  def astFolderPath(implicit flix: Flix): Path = {
+    flix.options.output.getOrElse(Path.of("./build/")).resolve("asts/")
+  }
 }

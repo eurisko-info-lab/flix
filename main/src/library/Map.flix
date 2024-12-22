@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
+import java.util.{Map => JMap}
+
 ///
 /// The Map type.
 ///
 /// A map is currently represented internally as a red-black tree.
 ///
-pub enum Map[k, v] with Sendable {
+pub enum Map[k, v] {
     case Map(RedBlackTree[k, v])
 }
 
@@ -42,6 +44,16 @@ instance Hash[Map[k, v]] with Hash[k], Hash[v] {
         Map.foldLeftWithKey((acc, k, v) -> acc `Hash.combine` Hash.hash(k) `Hash.combine` Hash.hash(v), Hash.magic(), m)
 }
 
+instance Indexable[Map[k, v]] with Order[k] {
+    type Idx = k
+    type Elm = v
+    type Aef = KeyNotFound
+    pub def get(t: Map[k, v], i: k): v \ KeyNotFound = match Map.get(i, t) {
+        case Some(v) => v
+        case None    => KeyNotFound.keyNotFound("key not found")
+    }
+}
+
 instance Functor[Map[k]] {
     pub def map(f: v1 -> v2 \ ef, m: Map[k, v1]): Map[k, v2] \ ef = Map.map(f, m)
 }
@@ -54,19 +66,19 @@ instance Foldable[Map[k]] {
 
 instance UnorderedFoldable[Map[k]] {
     pub def foldMap(f: v -> b \ ef, m: Map[k, v]): b \ ef with CommutativeMonoid[b] = Map.foldMap(f, m)
-    override pub def isEmpty(m: Map[k, v]): Bool = Map.isEmpty(m)
-    override pub def exists(f: v -> Bool \ ef, m: Map[k, v]): Bool \ ef = Map.exists(_ -> f, m)
-    override pub def forAll(f: v -> Bool \ ef, m: Map[k, v]): Bool \ ef = Map.forAll(_ -> f, m)
+    redef isEmpty(m: Map[k, v]): Bool = Map.isEmpty(m)
+    redef exists(f: v -> Bool \ ef, m: Map[k, v]): Bool \ ef = Map.exists(_ -> f, m)
+    redef forAll(f: v -> Bool \ ef, m: Map[k, v]): Bool \ ef = Map.forAll(_ -> f, m)
 }
 
 instance Traversable[Map[k]] {
     pub def traverse(f: a -> m[b] \ ef, t: Map[k, a]): m[Map[k, b]] \ ef with Applicative[m] = Map.traverse(f, t)
-    pub override def sequence(t: Map[k, m[a]]): m[Map[k, a]] with Applicative[m] = Map.sequence(t)
+    redef sequence(t: Map[k, m[a]]): m[Map[k, a]] with Applicative[m] = Map.sequence(t)
 }
 
 instance Filterable[Map[k]] with Order[k] {
     pub def filterMap(f: a -> Option[b] \ ef, m: Map[k, a]): Map[k, b] \ ef = Map.filterMap(f, m)
-    pub override def filter(f: a -> Bool \ ef, m: Map[k, a]): Map[k, a] \ ef = Map.filter(f, m)
+    redef filter(f: a -> Bool \ ef, m: Map[k, a]): Map[k, a] \ ef = Map.filter(f, m)
 }
 
 instance Witherable[Map[k]] with Order[k]
@@ -101,13 +113,20 @@ instance MeetLattice[Map[k, v]] with Order[k], Eq[v], MeetLattice[v] {
         Map.intersectionWith(MeetLattice.greatestLowerBound, m1, m2)
 }
 
-instance Iterable[Map[k]] {
-    pub def iterator(rc: Region[r], m: Map[k, v]): Iterator[v, r, r] \ r = Map.iteratorValues(rc, m)
+instance Iterable[Map[k, v]] {
+    type Elm = (k, v)
+    pub def iterator(rc: Region[r], m: Map[k, v]): Iterator[(k, v), r, r] \ r = Map.iterator(rc, m)
 }
 
 instance ToJava[Map[k, v]] with Order[k] {
-    type O = ##java.util.Map
-    pub def toJava(m: Map[k, v]): ##java.util.Map \ IO = Adaptor.toMap(m)
+    type Out = JMap
+    type Aef = IO
+    pub def toJava(m: Map[k, v]): JMap \ IO = Adaptor.toMap(m)
+}
+
+instance ToFlix[Map[k, v]] with Order[k] {
+    type In = JMap
+    pub def toFlix(m: JMap): Map[k, v] = Adaptor.fromMap(m)
 }
 
 mod Map {
@@ -116,25 +135,8 @@ mod Map {
     /// Returns a string representation of the given map `m`.
     ///
     pub def toString(m: Map[k, v]): String with ToString[k], ToString[v] = region rc {
-        let sb = StringBuilder.empty(rc);
-        StringBuilder.appendString!("Map#{", sb);
-        forEachWithIndex((i, k, v) -> {
-            if (i < 1)
-                StringBuilder.appendString!("${k} => ${v}", sb)
-            else
-                StringBuilder.appendString!(", ${k} => ${v}", sb)
-            }, m);
-        StringBuilder.appendString!("}", sb);
-        StringBuilder.toString(sb)
+        "Map#{" + (Map.iterator(rc, m) |> Iterator.map(match (k, v) -> "${k} => ${v}") |> Iterator.join(", ")) + "}"
     }
-
-    ///
-    /// Returns the number of threads to use for parallel evaluation.
-    ///
-    def threads(): Int32 =
-        // Note: We use a multiple of the number of physical cores for better performance.
-        let multiplier = 4;
-        multiplier * Environment.getVirtualProcessors()
 
     ///
     /// Determines whether to use parallel evaluation.
@@ -147,7 +149,7 @@ mod Map {
         minSize >= 1024
 
     ///
-    /// Returns the size of `m`.
+    /// Returns the number of keys in `m`.
     ///
     pub def size(m: Map[k, v]): Int32 =
         let Map(xs) = m;
@@ -226,7 +228,7 @@ mod Map {
                 if (useParallelEvaluation(m))
                     let h = (kl, _, kr, _) -> g(kl, kr);
                     let Map(t) = m;
-                    RedBlackTree.parMinimumBy(threads() - 1, h, t)
+                    RedBlackTree.parMinimumBy(h, t)
                 else
                     min()
             case Purity2.Impure(_) => min()
@@ -256,7 +258,7 @@ mod Map {
                 if (useParallelEvaluation(m))
                     let h = (_, vl, _, vr) -> g(vl, vr);
                     let Map(t) = m;
-                    RedBlackTree.parMinimumBy(threads() - 1, h, t)
+                    RedBlackTree.parMinimumBy(h, t)
                 else
                     min()
             case Purity2.Impure(_) => min()
@@ -286,7 +288,7 @@ mod Map {
                 if (useParallelEvaluation(m))
                     let h = (kl, _, kr, _) -> g(kl, kr);
                     let Map(t) = m;
-                    RedBlackTree.parMaximumBy(threads() - 1, h, t)
+                    RedBlackTree.parMaximumBy(h, t)
                 else
                     max()
             case Purity2.Impure(_) => max()
@@ -316,7 +318,7 @@ mod Map {
                 if (useParallelEvaluation(m))
                     let h = (_, vl, _, vr) -> g(vl, vr);
                     let Map(t) = m;
-                    RedBlackTree.parMaximumBy(threads() - 1, h, t)
+                    RedBlackTree.parMaximumBy(h, t)
                 else
                     max()
             case Purity2.Impure(_) => max()
@@ -597,7 +599,7 @@ mod Map {
             case Purity2.Pure(g) =>
                 if (useParallelEvaluation(m))
                     let Map(t) = m;
-                    RedBlackTree.parCount(threads() - 1, g, t)
+                    RedBlackTree.parCount(g, t)
                 else
                     c()
             case Purity2.Impure(_) => c()
@@ -627,7 +629,7 @@ mod Map {
         match purityOf2(f) {
             case Purity2.Pure(g) =>
                 if (useParallelEvaluation(m))
-                    RedBlackTree.parSumWith(threads() - 1, g, t)
+                    RedBlackTree.parSumWith(g, t)
                 else
                     sw()
             case Purity2.Impure(_) => sw()
@@ -647,7 +649,7 @@ mod Map {
         match purityOf2(f) {
             case Purity2.Pure(g) =>
                 if (useParallelEvaluation(m))
-                    RedBlackTree.parExists(threads() - 1, g, t)
+                    RedBlackTree.parExists(g, t)
                 else
                     e()
             case Purity2.Impure(_) => e()
@@ -667,7 +669,7 @@ mod Map {
         match purityOf2(f) {
             case Purity2.Pure(g) =>
                 if (useParallelEvaluation(m))
-                    RedBlackTree.parForAll(threads() - 1, g, t)
+                    RedBlackTree.parForAll(g, t)
                 else
                     fa()
             case Purity2.Impure(_) => fa()
@@ -771,13 +773,33 @@ mod Map {
     /// Returns `m` as a mutable map.
     ///
     pub def toMutMap(rc: Region[r], m: Map[k, v]): MutMap[k, v, r] \ r =
-        MutMap.MutMap(rc, ref m @ rc)
+        MutMap.MutMap(rc, Ref.fresh(rc, m))
 
     ///
     /// Returns the map `m` as a list of key-value pairs.
     ///
     pub def toList(m: Map[k, v]): List[(k, v)] =
         foldRightWithKey((k, v, acc) -> (k, v) :: acc, Nil, m)
+
+    ///
+    /// Returns the map `m` as an array.
+    ///
+    pub def toArray(rc: Region[r], m: Map[k, v]): Array[(k, v), r] \ r = match size(m) {
+        case 0  => Array#{} @ rc
+        case sz =>
+            let a = Array.empty(rc, sz);
+            forEachWithIndex((i, k, v) -> Array.put((k, v), i, a), m);
+            a
+        }
+
+    ///
+    /// Returns the map `m` as a vector.
+    ///
+    pub def toVector(m: Map[k, v]): Vector[(k, v)] = region rc {
+        let arr = Array.empty(rc, size(m));
+        forEachWithIndex((i, k, v) -> Array.put((k, v), i, arr), m);
+        Array.toVector(arr)
+    }
 
     ///
     /// Returns the map `m` as a set of key-value pairs.
@@ -836,7 +858,7 @@ mod Map {
     pub def unfold(f: s -> Option[(k, v, s)] \ ef, st: s): Map[k, v] \ ef with Order[k] =
         def loop(sst, m) = match f(sst) {
             case None            => m
-            case Some(k, v, st1) => loop(st1, insert(k, v, m))
+            case Some((k, v, st1)) => loop(st1, insert(k, v, m))
         };
         loop(st, empty())
 
@@ -851,14 +873,14 @@ mod Map {
     pub def unfoldWithIter(next: Unit -> Option[(k, v)] \ ef): Map[k, v] \ ef with Order[k] =
         def loop(m) = match next() {
             case None       => m
-            case Some(k, v) => loop(insert(k, v, m))
+            case Some((k, v)) => loop(insert(k, v, m))
         };
         loop(empty())
 
     ///
     /// Returns the set of tuples `(k, v)` where `v` is a value in `t` and `k => t`.
     ///
-    pub def explode(m: Map[k, t[v]]): Set[(k, v)] with Foldable[t], Order[k], Order[v] =
+    pub def explode(m: Map[k, t[v]]): Set[(k, v)] \ Foldable.Aef[t] with Foldable[t], Order[k], Order[v] =
         foldLeftWithKey((acc, k, t) -> Foldable.toSet(t) |> Set.map(e -> (k, e)) |> Set.union(acc), Set.empty(), m)
 
     ///

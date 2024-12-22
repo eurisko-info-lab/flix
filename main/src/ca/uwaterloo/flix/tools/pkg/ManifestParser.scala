@@ -15,20 +15,25 @@
  */
 package ca.uwaterloo.flix.tools.pkg
 
+import ca.uwaterloo.flix.language.ast.Symbol
 import ca.uwaterloo.flix.tools.pkg.Dependency.{FlixDependency, JarDependency, MavenDependency}
 import ca.uwaterloo.flix.tools.pkg.github.GitHub
 import ca.uwaterloo.flix.util.Result
-import ca.uwaterloo.flix.util.Result.{Err, Ok, ToOk, traverse}
-import ca.uwaterloo.flix.language.ast.Symbol
-import org.tomlj.{Toml, TomlArray, TomlInvalidTypeException, TomlParseResult, TomlTable}
+import ca.uwaterloo.flix.util.Result.{Err, Ok, traverse}
+import org.tomlj.*
 
 import java.io.{IOException, StringReader}
 import java.net.{URI, URL}
 import java.nio.file.Path
-import scala.collection.mutable
-import scala.jdk.CollectionConverters.SetHasAsScala
+import scala.jdk.CollectionConverters.{ListHasAsScala, SetHasAsScala}
 
 object ManifestParser {
+  /**
+    * Regular expression defining a valid string for user name and project name.
+    * Concretely, a valid name is a [[String]] consisting only of alphanumeric characters
+    * or the symbols `.`,`:`,`/`,`_` and `-`.
+    */
+  private val ValidName = "[a-zA-Z0-9.:/_-]+".r
 
   /**
     * Creates a Manifest from the .toml file
@@ -116,7 +121,7 @@ object ManifestParser {
     val allowedKeys = Set("package", "dependencies", "dev-dependencies", "mvn-dependencies", "dev-mvn-dependencies", "jar-dependencies")
     val illegalKeys = keySet.diff(allowedKeys)
 
-    if(illegalKeys.nonEmpty) {
+    if (illegalKeys.nonEmpty) {
       return Err(ManifestError.IllegalTableFound(p, illegalKeys.head))
     }
 
@@ -128,7 +133,7 @@ object ManifestParser {
       return Err(ManifestError.IllegalPackageKeyFound(p, illegalPackageKeys.head))
     }
 
-    ().toOk
+    Ok(())
   }
 
   /**
@@ -190,7 +195,7 @@ object ManifestParser {
       val array = parser.getArray(propString)
       Ok(Option(array))
     } catch {
-      case e: IllegalArgumentException => Ok(None)
+      case _: IllegalArgumentException => Ok(None)
       case e: TomlInvalidTypeException => Err(ManifestError.RequiredPropertyHasWrongType(p, propString, "Array", e.getMessage))
     }
   }
@@ -219,7 +224,7 @@ object ManifestParser {
     try {
       s.split('.') match {
         case Array(major, minor, patch) =>
-          Ok(SemVer(major.toInt, minor.toInt, Some(patch.toInt), None, None))
+          Ok(SemVer(major.toInt, minor.toInt, patch.toInt))
         case _ => Err(ManifestError.FlixVersionHasWrongLength(p, s))
       }
     } catch {
@@ -261,7 +266,9 @@ object ManifestParser {
           if (jarDep) {
             createJarDep(depKey, depValue, p)
           } else if (flixDep) {
-            createFlixDep(depKey, depValue, p)
+            // Key needs this format to do typed look-ups.
+            val dottedDepKey = s"\"$depKey\""
+            createFlixDep(deps, dottedDepKey, p)
           } else {
             createMavenDep(depKey, depValue, p)
           }
@@ -270,43 +277,18 @@ object ManifestParser {
   }
 
   /**
-    * Retrieves the repository for a Flix dependency
-    * and returns an error if it is not formatted correctly
-    * or has characters that are not allowed.
+    * Creates a MavenDependency.
+    * Group id and artifact id are given by `depName`.
+    * The version is given by `depVer`.
+    * `p` is for reporting errors.
     */
-  private def getRepository(depName: String, p: Path): Result[Repository, ManifestError] = {
-    depName.split(':') match {
-      case Array(repo, _) =>
-        if (repo == "github") Ok(Repository.GitHub)
-        else Err(ManifestError.UnsupportedRepository(p, repo))
-      case _ => Err(ManifestError.FlixDependencyFormatError(p, depName))
-    }
-  }
-
-  /**
-    * Retrieves the username for a Flix dependency
-    * and returns an error if it is not formatted correctly
-    * or has characters that are not allowed.
-    */
-  private def getUsername(depName: String, p: Path): Result[String, ManifestError] = {
-    depName.split(':') match {
-      case Array(_, rest) => rest.split('/') match {
-        case Array(username, _) => checkNameCharacters(username, p)
-        case _ => Err(ManifestError.FlixDependencyFormatError(p, depName))
-      }
-      case _ => Err(ManifestError.FlixDependencyFormatError(p, depName))
-    }
-  }
-
-  /**
-    * Retrieves the project name for a Flix dependency
-    * and returns an error if it is not formatted correctly
-    * or has characters that are not allowed.
-    */
-  private def getProjectName(depName: String, p: Path): Result[String, ManifestError] = {
-    depName.split('/') match {
-      case Array(_, projectName) => checkNameCharacters(projectName, p)
-      case _ => Err(ManifestError.FlixDependencyFormatError(p, depName))
+  private def createMavenDep(depName: String, depVer: AnyRef, p: Path): Result[MavenDependency, ManifestError] = {
+    for (
+      groupId <- getGroupId(depName, p);
+      artifactId <- getArtifactId(depName, p);
+      version <- getMavenVersion(depVer, p)
+    ) yield {
+      Dependency.MavenDependency(groupId, artifactId, version)
     }
   }
 
@@ -331,6 +313,125 @@ object ManifestParser {
     depName.split(':') match {
       case Array(_, artifactId) => checkNameCharacters(artifactId, p)
       case _ => Err(ManifestError.MavenDependencyFormatError(p, depName))
+    }
+  }
+
+  /**
+    * A Maven version number is an uninterpreted tag. Maven (the repository) does not
+    * enforce a format for version numbers so we must be liberal about what we accept.
+    */
+  private def getMavenVersion(depVer: AnyRef, p: Path): Result[String, ManifestError] = {
+    try {
+      val version = depVer.asInstanceOf[String]
+      Ok(version)
+    } catch {
+      case e: ClassCastException =>
+        Err(ManifestError.DependencyFormatError(p, e.getMessage))
+    }
+  }
+
+  /**
+    * Create a [[FlixDependency]].
+    *
+    * @param deps   [[TomlTable]] of declared Flix dependencies.
+    * @param depKey Repository address of the package.
+    * @param p      [[Path]] of the project Toml file.
+    * @return [[Result]] of the [[FlixDependency]] if succesful, otherwise a [[ManifestError]]
+    */
+  private def createFlixDep(deps: TomlTable, depKey: String, p: Path): Result[FlixDependency, ManifestError] = {
+    // Regex for extracting repository, username, and project name.
+    // (.+) is a capturing group, where . matches any character.
+    val validPkg = s"^\"(.+):(.+)/(.+)\"$$".r
+    depKey match {
+      case validPkg(repoStr, username, projectName) =>
+        val repo = Repository.mkRepository(repoStr) match {
+          case Ok(r) => r
+          case Err(_) => return Err(ManifestError.UnsupportedRepository(p, repoStr))
+        }
+
+        // Ensure the username is valid.
+        if (!username.matches(s"^$ValidName$$"))
+          return Err(ManifestError.IllegalName(p, depKey))
+
+        // Ensure the project name is valid.
+        if (!projectName.matches(s"^$ValidName$$"))
+          return Err(ManifestError.IllegalName(p, depKey))
+
+        // If the dependency maps to a string, parse the version.
+        if (deps.isString(depKey)) {
+          getFlixVersion(deps, depKey, p).map {
+            Dependency.FlixDependency(repo, username, projectName, _, Nil)
+          }
+
+
+          // If the dependency maps to a table, get the version and permissions.
+        } else if (deps.isTable(depKey)) {
+          val depTbl = deps.getTable(depKey)
+          val verKey = "version"
+          val permKey = "permissions"
+
+          for (
+            ver <- getFlixVersion(depTbl, verKey, p);
+            perm <- getPermissions(depTbl, permKey, p)
+          ) yield FlixDependency(repo, username, projectName, ver, perm)
+        } else {
+          Err(ManifestError.VersionTypeError(Option.apply(p), depKey, deps.get(depKey)))
+        }
+      case _ => Err(ManifestError.FlixDependencyFormatError(p, depKey))
+    }
+  }
+
+  /**
+    * Attempt to retrieve a [[SemVer]] at `depKey` from the table `deps`.
+    */
+  private def getFlixVersion(deps: TomlTable, depKey: String, p: Path): Result[SemVer, ManifestError] = {
+    // Ensure the version is a String.
+    if (!deps.isString(depKey)) {
+      Err(ManifestError.VersionTypeError(Option.apply(p), depKey, deps.get(depKey)))
+    } else {
+      val depVer = deps.getString(depKey)
+      SemVer.ofString(depVer) match {
+        case Some(v) => Ok(v)
+        case None => Err(ManifestError.FlixVersionFormatError(Option.apply(p), depKey, depVer))
+      }
+    }
+  }
+
+  /**
+    * Retrieve a list of permissions from a [[TomlTable]] `depTbl` at `key`.
+    */
+  private def getPermissions(depTbl: TomlTable, key: String, p: Path): Result[List[Permission], ManifestError] = {
+    // Ensure the permissions are an Array.
+    if (!depTbl.isArray(key)) {
+      val perms = depTbl.get(key)
+      Err(ManifestError.FlixDependencyPermissionTypeError(Option.apply(p), key, perms))
+    } else {
+      val permArray = depTbl.getArray(key)
+      val permissions = permArray.toList.asScala.toList.map({
+        // Ensure the contents of the array are strings.
+        case s: String => Permission.mkPermission(s) match {
+          case Some(p) => p
+          case None => return Err(ManifestError.FlixUnknownPermissionError(p, key, s))
+        }
+        // If an entry is not a string, return an error.
+        case _ => return Err(ManifestError.FlixDependencyPermissionTypeError(Option.apply(p), key, permArray))
+      })
+      Ok(permissions)
+    }
+  }
+
+  /**
+    * Creates a JarDependency.
+    * URL and website is given by `depUrl`.
+    * The file name is given by `depName`.
+    * `p` is for reporting errors.
+    */
+  private def createJarDep(depName: String, depUrl: AnyRef, p: Path): Result[JarDependency, ManifestError] = {
+    for (
+      url <- getUrl(depUrl, p);
+      fileName <- getFileName(depName, p)
+    ) yield {
+      Dependency.JarDependency(url, fileName)
     }
   }
 
@@ -366,93 +467,26 @@ object ManifestParser {
     */
   private def getFileName(depName: String, p: Path): Result[String, ManifestError] = {
     val split = depName.split('.')
-    if(split.length >= 2) {
-      val extension = split.apply(split.length-1)
+    if (split.length >= 2) {
+      val extension = split.apply(split.length - 1)
       if (extension == "jar") {
-          checkNameCharacters(depName, p)
-        } else {
-          Err(ManifestError.JarUrlExtensionError(p, depName, extension))
-        }
+        checkNameCharacters(depName, p)
+      } else {
+        Err(ManifestError.JarUrlExtensionError(p, depName, extension))
+      }
     } else {
       Err(ManifestError.JarUrlFileNameError(p, depName))
     }
-
   }
 
   /**
-    * Converts `depVer` to a String and then to a semantic version
-    * and returns an error if `depVer` is not of the correct format.
+    * Checks that a package name does not include any illegal characters.
     */
-  def getFlixVersion(depVer: AnyRef, p: Path): Result[SemVer, ManifestError] = {
-    try {
-      toFlixVer(depVer.asInstanceOf[String], p)
-    } catch {
-      case e: ClassCastException =>
-        Err(ManifestError.DependencyFormatError(p, e.getMessage))
-    }
-  }
-
-  /**
-    * A Maven version number is an uninterpreted tag. Maven (the repository) does not
-    * enforce a format for version numbers so we must be liberal about what we accept.
-    */
-  def getMavenVersion(depVer: AnyRef, p: Path): Result[String, ManifestError] = {
-    try {
-      val version = depVer.asInstanceOf[String]
-      Ok(version)
-    } catch {
-      case e: ClassCastException =>
-        Err(ManifestError.DependencyFormatError(p, e.getMessage))
-    }
-  }
-
-  /**
-    * Creates a MavenDependency.
-    * Group id and artifact id are given by `depName`.
-    * The version is given by `depVer`.
-    * `p` is for reporting errors.
-    */
-  private def createMavenDep(depName: String, depVer: AnyRef, p: Path): Result[MavenDependency, ManifestError] = {
-    for(
-      groupId <- getGroupId(depName, p);
-      artifactId <- getArtifactId(depName, p);
-      version <- getMavenVersion(depVer, p)
-    ) yield {
-        Dependency.MavenDependency(groupId, artifactId, version)
-    }
-  }
-
-  /**
-    * Creates a FlixDependency.
-    * Repository, username and project name are given by `depName`.
-    * The version is given by `depVer`.
-    * `prodDep` decides whether it is a production or development dependency.
-    * `p` is for reporting errors.
-    */
-  private def createFlixDep(depName: String, depVer: AnyRef, p: Path): Result[FlixDependency, ManifestError] = {
-    for (
-      repository <- getRepository(depName, p);
-      username <- getUsername(depName, p);
-      projectName <- getProjectName(depName, p);
-      version <- getFlixVersion(depVer, p)
-    ) yield {
-      Dependency.FlixDependency(repository, username, projectName, version)
-    }
-  }
-
-  /**
-    * Creates a JarDependency.
-    * URL and website is given by `depUrl`.
-    * The file name is given by `depName`.
-    * `p` is for reporting errors.
-    */
-  private def createJarDep(depName: String, depUrl: AnyRef, p: Path): Result[JarDependency, ManifestError] = {
-    for (
-      url <- getUrl(depUrl, p);
-      fileName <- getFileName(depName, p)
-    ) yield {
-      Dependency.JarDependency(url, fileName)
-    }
+  private def checkNameCharacters(name: String, p: Path): Result[String, ManifestError] = {
+    if (name.matches("^[a-zA-Z0-9.:/_-]+$"))
+      Ok(name)
+    else
+      Err(ManifestError.IllegalName(p, name))
   }
 
   /**
@@ -460,17 +494,11 @@ object ManifestParser {
     * an error if anything in the array is not a String.
     */
   private def convertTomlArrayToStringList(array: TomlArray, p: Path): Result[List[String], ManifestError] = {
-    val stringSet = mutable.Set.empty[String]
-    for (i <- 0 until array.size()) {
-      try {
-        val s = array.getString(i)
-        stringSet.add(s)
-      } catch {
-        case e: TomlInvalidTypeException =>
-          return Err(ManifestError.AuthorNameError(p, e.getMessage))
-      }
-    }
-    Ok(stringSet.toList)
+    val strings = array.toList.asScala.toList.map({
+      case s: String => s
+      case _ => return Err(ManifestError.AuthorNameError(p))
+    })
+    Ok(strings)
   }
 
   /**
@@ -487,16 +515,6 @@ object ManifestParser {
         }.toSet
         Ok(PackageModules.Selected(moduleSet))
     }
-  }
-
-  /**
-    * Checks that a package name does not include any illegal characters.
-    */
-  private def checkNameCharacters(name: String, p: Path): Result[String, ManifestError] = {
-    if(name.matches("^[a-zA-Z0-9.:/_-]+$"))
-      Ok(name)
-    else
-      Err(ManifestError.IllegalName(p, name))
   }
 
 }

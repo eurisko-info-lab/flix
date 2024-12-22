@@ -45,15 +45,6 @@ sealed trait TypeConstraint {
     case TypeConstraint.Purification(sym, eff1, eff2, _, nested) => s"$eff1 ~ ($eff2)[$sym ↦ Pure] ∧ $nested"
   }
 
-  /**
-    * Returns the number of type variables in the constraint.
-    */
-  def numVars: Int = this match {
-    case TypeConstraint.Equality(tpe1, tpe2, _) => tpe1.typeVars.size + tpe2.typeVars.size
-    case TypeConstraint.Trait(_, tpe, _) => tpe.typeVars.size
-    case TypeConstraint.Purification(_, eff1, eff2, _, _) => eff1.typeVars.size + eff2.typeVars.size
-  }
-
   def loc: SourceLocation
 }
 
@@ -79,8 +70,8 @@ object TypeConstraint {
 
   /**
     * A constraint indicating that:
-    * - `eff1` is equivalent to `eff2` when the region `sym` is purified in `eff2`, and
-    * - the nested constraints all hold
+    *   - `eff1` is equivalent to `eff2` when the region `sym` is purified in `eff2`, and
+    *   - the nested constraints all hold
     *
     * This constraint arises when exiting a region.
     * All nested constraints must be resolved before determining the equality of `eff1` and `eff2`,

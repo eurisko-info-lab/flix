@@ -16,36 +16,39 @@
 
 package ca.uwaterloo.flix.language.dbg
 
-import ca.uwaterloo.flix.language.ast.{Ast, Name, Symbol}
+import ca.uwaterloo.flix.language.ast.shared.*
+import ca.uwaterloo.flix.language.ast.{Name, Symbol}
 
 import java.lang.reflect.{Constructor, Field, Method}
+import scala.collection.immutable.SortedSet
 
 sealed trait DocAst
 
 object DocAst {
 
-  case class Def(ann: Ast.Annotations, mod: Ast.Modifiers, sym: Symbol.DefnSym, parameters: List[Expression.Ascription], resType: Type, effect: Eff, body: Expression)
+  case class Def(ann: Annotations, mod: Modifiers, sym: Symbol.DefnSym, parameters: List[Expr.AscriptionTpe], resType: Type, effect: Type, body: Expr)
 
-  case class Enum(ann: Ast.Annotations, mod: Ast.Modifiers, sym: Symbol.EnumSym, tparams: List[TypeParam], cases: List[Case])
+  case class Enum(ann: Annotations, mod: Modifiers, sym: Symbol.EnumSym, tparams: List[TypeParam], cases: List[Case])
 
-  case class Case(sym: Symbol.CaseSym, tpe: Type)
+  case class Case(sym: Symbol.CaseSym, tpes: List[Type])
 
   case class TypeParam(sym: Symbol.KindedTypeVarSym)
 
-  case class Program(enums: List[Enum], defs: List[Def])
+  /** `misc` is used for printing non-structured asts like [[ca.uwaterloo.flix.language.ast.SyntaxTree]] */
+  case class Program(enums: List[Enum], defs: List[Def], misc: List[(String, Expr)])
 
-  case class JvmMethod(ident: Name.Ident, fparams: List[Expression.Ascription], clo: Expression, tpe: Type)
+  case class JvmMethod(ident: Name.Ident, fparams: List[Expr.AscriptionTpe], clo: Expr, tpe: Type)
 
 
-  sealed trait Expression
+  sealed trait Expr
 
-  object Expression {
+  object Expr {
 
-    /** A [[Expression]] atom that doesn't need parenthesis */
-    sealed trait Atom extends Expression
+    /** A [[Expr]] atom that doesn't need parenthesis */
+    sealed trait Atom extends Expr
 
-    /** A [[Expression]] that sometimes needs parenthesis */
-    sealed trait Composite extends Expression
+    /** A [[Expr]] that sometimes needs parenthesis */
+    sealed trait Composite extends Expr
 
     sealed trait LetBinder extends Atom
 
@@ -53,9 +56,9 @@ object DocAst {
 
     case object Unit extends Atom
 
-    case class Tuple(elms: List[Expression]) extends Atom
+    case class Tuple(elms: List[Expr]) extends Atom
 
-    case class Tag(sym: Symbol.CaseSym, args: List[Expression]) extends Atom
+    case class Tag(sym: Symbol.CaseSym, args: List[Expr]) extends Atom
 
     /** inserted string printed as-is (assumed not to require parenthesis) */
     case class AsIs(s: String) extends Atom
@@ -65,234 +68,259 @@ object DocAst {
 
     case object RecordEmpty extends Atom
 
-    case class RecordExtend(label: Name.Label, value: Expression, rest: Expression) extends RecordOp
+    case class RecordExtend(label: Name.Label, value: Expr, rest: Expr) extends RecordOp
 
-    case class RecordRestrict(label: Name.Label, value: Expression) extends RecordOp
+    case class RecordRestrict(label: Name.Label, value: Expr) extends RecordOp
 
-    case class Keyword(word: String, d: Expression) extends Composite
+    case class Keyword(word: String, d: Expr) extends Composite
 
-    case class DoubleKeyword(word1: String, d1: Expression, word2: String, d2: Either[Expression, Type]) extends Composite
+    case class DoubleKeyword(word1: String, d1: Expr, word2: String, d2: Either[Expr, Type]) extends Composite
 
-    case class Unary(op: String, d: Expression) extends Composite
+    case class TripleKeyword(word1: String, d1: Expr, word2: String, d2: Type, word3: String, d3: Type) extends Composite
+
+    case class Unary(op: String, d: Expr) extends Composite
 
     /** e.g. `arr?` */
-    case class UnaryRightAfter(d: Expression, op: String) extends Atom
+    case class UnaryRightAfter(d: Expr, op: String) extends Atom
 
-    case class Binary(d1: Expression, op: String, d2: Expression) extends Composite
+    case class Binary(d1: Expr, op: String, d2: Expr) extends Composite
 
-    case class IfThenElse(cond: Expression, thn: Expression, els: Expression) extends Composite
+    case class IfThenElse(cond: Expr, thn: Expr, els: Expr) extends Composite
 
-    case class Branch(d: Expression, branches: Map[Symbol.LabelSym, Expression]) extends Atom
+    case class Branch(d: Expr, branches: Map[Symbol.LabelSym, Expr]) extends Atom
 
-    case class Match(d: Expression, branches: List[(Expression, Option[Expression], Expression)]) extends Atom
+    case class Match(d: Expr, branches: List[(Expr, Option[Expr], Expr)]) extends Atom
 
-    case class TypeMatch(d: Expression, branches: List[(Expression, Type, Expression)]) extends Atom
+    case class TypeMatch(d: Expr, branches: List[(Expr, Type, Expr)]) extends Atom
 
     /** e.g. `r.x` */
-    case class Dot(d1: Expression, d2: Expression) extends Atom
+    case class Dot(d1: Expr, d2: Expr) extends Atom
 
     /** e.g. `r..toString()`. It is used for java "dots" */
-    case class DoubleDot(d1: Expression, d2: Expression) extends Atom
+    case class DoubleDot(d1: Expr, d2: Expr) extends Atom
 
-    case class TryCatch(d: Expression, rules: List[(Symbol.VarSym, Class[_], Expression)]) extends Atom
+    /**
+      * e.g. `r#x` for [[RecordSelect]].
+      */
+    case class Hash(d1: Expr, d2: Expr) extends Atom
 
-    case class TryWith(d1: Expression, eff: Symbol.EffectSym, rules: List[(Symbol.OpSym, List[Ascription], Expression)]) extends Atom
+    case class TryCatch(d: Expr, rules: List[(Symbol.VarSym, Class[?], Expr)]) extends Atom
 
-    case class Stm(d1: Expression, d2: Expression) extends LetBinder
+    case class TryWith(d1: Expr, eff: Symbol.EffectSym, rules: List[(Symbol.OpSym, List[AscriptionTpe], Expr)]) extends Atom
 
-    case class Let(v: Expression, tpe: Option[Type], bind: Expression, body: Expression) extends LetBinder
+    case class Stm(d1: Expr, d2: Expr) extends LetBinder
 
-    case class LetRec(v: Expression, tpe: Option[Type], bind: Expression, body: Expression) extends LetBinder
+    case class Let(v: Expr, tpe: Option[Type], bind: Expr, body: Expr) extends LetBinder
 
-    case class Scope(v: Expression, d: Expression) extends Atom
+    case class LocalDef(sym: Expr, parameters: List[Expr.AscriptionTpe], resType: Option[Type], effect: Option[Type], body: Expr, next: Expr) extends LetBinder
 
-    case class App(f: Expression, args: List[Expression]) extends Atom
+    case class Scope(v: Expr, d: Expr) extends Atom
 
-    case class SquareApp(f: Expression, args: List[Expression]) extends Atom
+    case class App(f: Expr, args: List[Expr]) extends Atom
 
-    case class DoubleSquareApp(f: Expression, args: List[Expression]) extends Atom
+    case class SquareApp(f: Expr, args: List[Expr]) extends Atom
 
-    case class Assign(d1: Expression, d2: Expression) extends Composite
+    case class DoubleSquareApp(f: Expr, args: List[Expr]) extends Atom
 
-    case class Ascription(v: Expression, tpe: Type) extends Composite
+    case class Assign(d1: Expr, d2: Expr) extends Composite
 
-    case class NewObject(name: String, clazz: Class[_], tpe: Type, methods: List[JvmMethod]) extends Composite
+    case class AscriptionTpe(v: Expr, tpe: Type) extends Composite
 
-    case class Lambda(fparams: List[Expression.Ascription], body: Expression) extends Composite
+    case class AscriptionEff(v: Expr, tpe: Option[Type], eff: Option[Type]) extends Composite
 
-    case class Native(clazz: Class[_]) extends Atom
+    case class Unsafe(d: Expr, tpe: Type) extends Composite
 
-    val Unknown: Expression =
+    case class NewObject(name: String, clazz: Class[?], tpe: Type, methods: List[JvmMethod]) extends Composite
+
+    case class Lambda(fparams: List[Expr.AscriptionTpe], body: Expr) extends Composite
+
+    case class Native(clazz: Class[?]) extends Atom
+
+    val Unknown: Expr =
       Meta("unknown exp")
 
-    def Var(sym: Symbol.VarSym): Expression =
+    def Var(sym: Symbol.VarSym): Expr =
       AsIs(sym.toString)
 
-    val Wild: Expression =
+    val Wild: Expr =
       AsIs("_")
 
-    /** e.g. `x_2` */
-    def VarWithOffset(sym: Symbol.VarSym): Expression =
-      AsIs(sym.toString + "_" + sym.getStackOffset(0).toString)
-
-    def Hole(sym: Symbol.HoleSym): Expression =
+    def Hole(sym: Symbol.HoleSym): Expr =
       AsIs("?" + sym.toString)
 
-    def HoleWithExp(exp: Expression): Expression =
+    def HoleWithExp(exp: Expr): Expr =
       UnaryRightAfter(exp, "?")
 
-    def HoleError(sym: Symbol.HoleSym): Expression =
+    def HoleError(sym: Symbol.HoleSym): Expr =
       AsIs(sym.toString)
 
     /** the region value */
-    val Region: Expression =
+    val Region: Expr =
       Meta("region")
 
-    val MatchError: Expression =
+    val MatchError: Expr =
       AsIs("?matchError")
 
     /** represents the error ast node when compiling partial programs */
-    val Error: Expression =
+    val Error: Expr =
       AsIs("?astError")
 
-    def Untag(sym: Symbol.CaseSym, d: Expression): Expression =
-      Keyword("untag", d)
+    def Untag(sym: Symbol.CaseSym, d: Expr, idx: Int): Expr =
+      Keyword("untag_" + idx, d)
 
-    def Is(sym: Symbol.CaseSym, d: Expression): Expression =
+    def Is(sym: Symbol.CaseSym, d: Expr): Expr =
       Binary(d, "is", AsIs(sym.toString))
 
-    /** The control separated return statement */
-    def Ret(d: Expression): Expression =
-      Keyword("ret", d)
-
-    def Ref(d: Expression): Expression =
-      Keyword("ref", d)
-
-    def Deref(d: Expression): Expression =
-      Keyword("deref", d)
-
-    def Discard(d: Expression): Expression =
+    def Discard(d: Expr): Expr =
       Keyword("discard", d)
 
-    def Def(sym: Symbol.DefnSym): Expression =
+    def Def(sym: Symbol.DefnSym): Expr =
       AsIs(sym.toString)
 
-    def Sig(sym: Symbol.SigSym): Expression =
+    def Sig(sym: Symbol.SigSym): Expr =
       AsIs(sym.toString)
 
     /** e.g. `something @ rc` */
-    def InRegion(d1: Expression, d2: Expression): Expression =
+    def InRegion(d1: Expr, d2: Expr): Expr =
       Binary(d1, "@", d2)
 
-    def ArrayNew(d1: Expression, d2: Expression): Expression =
+    def ArrayNew(d1: Expr, d2: Expr): Expr =
       SquareApp(AsIs(""), List(Binary(d1, ";", d2)))
 
-    def ArrayLit(ds: List[Expression]): Expression =
+    def ArrayLit(ds: List[Expr]): Expr =
       SquareApp(AsIs(""), ds)
 
-    def ArrayLength(d: Expression): Expression =
+    def ArrayLength(d: Expr): Expr =
       DoubleDot(d, AsIs("length"))
 
-    def ArrayLoad(d1: Expression, index: Expression): Expression =
+    def ArrayLoad(d1: Expr, index: Expr): Expr =
       SquareApp(d1, List(index))
 
-    def ArrayStore(d1: Expression, index: Expression, d2: Expression): Expression =
+    def ArrayStore(d1: Expr, index: Expr, d2: Expr): Expr =
       Assign(SquareApp(d1, List(index)), d2)
 
-    def VectorLit(ds: List[Expression]): Expression =
+    def StructNew(sym: Symbol.StructSym, exps: List[(Symbol.StructFieldSym, Expr)], d2: Expr): Expr = {
+      val beforeRecord = "new " + sym.toString
+      val name = Name.Label(sym.name, sym.loc)
+      val record = exps.foldRight(RecordEmpty: Expr) { case (cur, acc) => RecordExtend(name, cur._2, acc) }
+      DoubleKeyword(beforeRecord, record, "@", Left(d2))
+    }
+
+    def StructGet(d1: Expr, field: Symbol.StructFieldSym): Expr =
+      Dot(d1, AsIs(field.name))
+
+    def StructPut(d1: Expr, field: Symbol.StructFieldSym, d2: Expr): Expr =
+      Assign(Dot(d1, AsIs(field.name)), d2)
+
+    def VectorLit(ds: List[Expr]): Expr =
       DoubleSquareApp(AsIs(""), ds)
 
-    def VectorLoad(d1: Expression, index: Expression): Expression =
+    def VectorLoad(d1: Expr, index: Expr): Expr =
       DoubleSquareApp(d1, List(index))
 
-    def VectorLength(d: Expression): Expression =
+    def VectorLength(d: Expr): Expr =
       DoubleDot(d, AsIs("length"))
 
-    def Lazy(d: Expression): Expression =
+    def Lazy(d: Expr): Expr =
       Keyword("lazy", d)
 
-    def Force(d: Expression): Expression =
+    def Force(d: Expr): Expr =
       Keyword("force", d)
 
-    def Index(idx: Int, d: Expression): Expression =
+    def Throw(d: Expr): Expr =
+      Keyword("throw", d)
+
+    def Index(idx: Int, d: Expr): Expr =
       Dot(d, AsIs(s"_$idx"))
 
-    def InstanceOf(d: Expression, clazz: Class[_]): Expression =
+    def InstanceOf(d: Expr, clazz: Class[?]): Expr =
       Binary(d, "instanceof", Native(clazz))
 
-    def ClosureLifted(sym: Symbol.DefnSym, ds: List[Expression]): Expression = {
+    def ClosureLifted(sym: Symbol.DefnSym, ds: List[Expr]): Expr = {
       val defName = AsIs(sym.toString)
       if (ds.isEmpty) defName else App(defName, ds)
     }
 
-    def Spawn(d1: Expression, d2: Expression): Expression =
+    def Spawn(d1: Expr, d2: Expr): Expr =
       InRegion(Keyword("spawn", d1), d2)
 
-    def Cast(d: Expression, tpe: Type): Expression =
+    def Cast(d: Expr, tpe: Type): Expr =
       DoubleKeyword("cast", d, "as", Right(tpe))
 
-    def Unbox(d: Expression, tpe: Type): Expression =
+    def UncheckedCast(d: Expr, tpe0: Option[Type], eff0: Option[Type]): Expr = (tpe0, eff0) match {
+      case (Some(tpe), Some(eff)) => TripleKeyword("unchecked_cast", d, "as", tpe, "\\", eff)
+      case (Some(tpe), None) => DoubleKeyword("unchecked_cast", d, "as", Right(tpe))
+      case (None, Some(eff)) => TripleKeyword("unchecked_cast", d, "as", Type.Wild, "\\", eff)
+      case (None, None) => d
+    }
+
+    def CheckedCast(cast: CheckedCastType, d: Expr): Expr = cast match {
+      case CheckedCastType.TypeCast => Keyword("checked_cast", d)
+      case CheckedCastType.EffectCast => Keyword("checked_ecast", d)
+    }
+
+    def Unbox(d: Expr, tpe: Type): Expr =
       DoubleKeyword("unbox", d, "as", Right(tpe))
 
-    def Box(d: Expression): Expression =
+    def Box(d: Expr): Expr =
       Keyword("box", d)
 
-    def Without(d: Expression, sym: Symbol.EffectSym): Expression =
+    def Without(d: Expr, sym: Symbol.EffectSym): Expr =
       Binary(d, "without", AsIs(sym.toString))
 
-    def Cst(cst: Ast.Constant): Expression =
+    def Cst(cst: Constant): Expr =
       printer.ConstantPrinter.print(cst)
 
-    def ApplyClo(d: Expression, ds: List[Expression], ct: Option[Ast.ExpPosition]): Expression =
+    def ApplyClo(d: Expr, ds: List[Expr], ct: Option[ExpPosition]): Expr =
       App(d, ds)
 
-    def ApplySelfTail(sym: Symbol.DefnSym, ds: List[Expression]): Expression =
+    def ApplySelfTail(sym: Symbol.DefnSym, ds: List[Expr]): Expr =
       App(AsIs(sym.toString), ds)
 
-    def ApplyDef(sym: Symbol.DefnSym, ds: List[Expression], ct: Option[Ast.ExpPosition]): Expression =
+    def ApplyDef(sym: Symbol.DefnSym, ds: List[Expr], ct: Option[ExpPosition]): Expr =
       App(AsIs(sym.toString), ds)
 
-    def Do(sym: Symbol.OpSym, ds: List[Expression]): Expression =
+    def Do(sym: Symbol.OpSym, ds: List[Expr]): Expr =
       Keyword("do", App(AsIs(sym.toString), ds))
 
-    def JavaInvokeMethod(m: Method, d: Expression, ds: List[Expression]): Expression =
+    def JavaInvokeMethod(d: Expr, methodName: Name.Ident, ds: List[Expr]): Expr =
+      App(DoubleDot(d, AsIs(methodName.name)), ds)
+
+    def JavaInvokeMethod(m: Method, d: Expr, ds: List[Expr]): Expr =
       App(DoubleDot(d, AsIs(m.getName)), ds)
 
-    def JavaInvokeStaticMethod(m: Method, ds: List[Expression]): Expression = {
+    def JavaInvokeStaticMethod(m: Method, ds: List[Expr]): Expr = {
       App(Dot(Native(m.getDeclaringClass), AsIs(m.getName)), ds)
     }
 
-    def JavaGetStaticField(f: Field): Expression = {
+    def JavaGetStaticField(f: Field): Expr = {
       Dot(Native(f.getDeclaringClass), AsIs(f.getName))
     }
 
-    def JavaInvokeConstructor(c: Constructor[_], ds: List[Expression]): Expression = {
+    def JavaInvokeConstructor(c: Constructor[?], ds: List[Expr]): Expr = {
       App(Native(c.getDeclaringClass), ds)
     }
 
-    def JavaGetField(f: Field, d: Expression): Expression =
+    def JavaGetField(f: Field, d: Expr): Expr =
       DoubleDot(d, AsIs(f.getName))
 
-    def JavaPutField(f: Field, d1: Expression, d2: Expression): Expression =
+    def JavaPutField(f: Field, d1: Expr, d2: Expr): Expr =
       Assign(DoubleDot(d1, AsIs(f.getName)), d2)
 
-    def JavaPutStaticField(f: Field, d: Expression): Expression =
+    def JavaPutStaticField(f: Field, d: Expr): Expr =
       Assign(Dot(Native(f.getDeclaringClass), AsIs(f.getName)), d)
 
-    def JumpTo(sym: Symbol.LabelSym): Expression =
+    def JumpTo(sym: Symbol.LabelSym): Expr =
       Keyword("goto", AsIs(sym.toString))
 
-    def RecordSelect(label: Name.Label, d: Expression): Expression =
-      Dot(d, AsIs(label.name))
+    def RecordSelect(label: Name.Label, d: Expr): Expr =
+      Hash(d, AsIs(label.name))
 
-    def Regex(p: java.util.regex.Pattern): Expression =
+    def Regex(p: java.util.regex.Pattern): Expr =
       App(AsIs("Regex"), List(AsIs(s""""${p.toString}"""")))
 
-    val Absent: Expression =
+    val Absent: Expr =
       AsIs("Absent")
-
-    def Present(d: Expression): Expression =
-      App(AsIs("Present"), List(d))
 
   }
 
@@ -308,23 +336,76 @@ object DocAst {
 
     case class AsIs(s: String) extends Atom
 
-    case class App(obj: String, args: List[Type]) extends Atom
+    case class Ascribe(tpe: Type, kind: Type) extends Composite
+
+    case class App(obj: Type, args: List[Type]) extends Atom
 
     case class Tuple(elms: List[Type]) extends Atom
 
-    case class Arrow(args: List[Type], res: Type) extends Composite
+    case class ArrowEff(args: List[Type], res: Type, eff: Type) extends Composite
+
+    case object RecordRowEmpty extends Atom
+
+    case class RecordRowExtend(label: String, value: Type, rest: Type) extends Atom
+
+    case class RecordOf(tpe: Type) extends Atom
 
     case object RecordEmpty extends Atom
 
     case class RecordExtend(label: String, value: Type, rest: Type) extends Atom
 
+    case object SchemaRowEmpty extends Atom
+
+    case class SchemaRowExtend(label: String, tpe: Type, rest: Type) extends Atom
+
+    case class SchemaOf(tpe: Type) extends Atom
+
     case object SchemaEmpty extends Atom
 
     case class SchemaExtend(name: String, tpe: Type, rest: Type) extends Atom
 
-    case class Native(clazz: Class[_]) extends Atom
+    case class Native(clazz: Class[?]) extends Atom
 
-    /** inserted string printed as-is (assumed not to require parenthesis) */
+    case class JvmConstructor(constructor: Constructor[?]) extends Atom
+
+    case class JvmMethod(method: Method) extends Atom
+
+    case class JvmField(field: Field) extends Atom
+
+
+    case class Not(tpe: Type) extends Composite
+
+    case class And(tpe1: Type, tpe2: Type) extends Composite
+
+    case class Or(tpe1: Type, tpe2: Type) extends Composite
+
+    case class Complement(tpe: Type) extends Composite
+
+    case class Union(tpe1: Type, tpe2: Type) extends Composite
+
+    case class Intersection(tpe1: Type, tpe2: Type) extends Composite
+
+    case class Difference(tpe1: Type, tpe2: Type) extends Composite
+
+    case class SymmetricDiff(tpe1: Type, tpe2: Type) extends Composite
+
+    case class CaseSet(syms: SortedSet[Symbol.RestrictableCaseSym]) extends Atom
+
+    case class CaseComplement(tpe: Type) extends Composite
+
+    case class CaseUnion(tpe1: Type, tpe2: Type) extends Composite
+
+    case class CaseIntersection(tpe1: Type, tpe2: Type) extends Composite
+
+    case object Pure extends Atom
+
+    /** Represents the union of IO and all regions. */
+    case object Impure extends Atom
+
+    /** Represents Impure and all algebraic effect. */
+    case object ControlImpure extends Atom
+
+    /** Inserted string printed as-is (assumed not to require parenthesis) */
     case class Meta(s: String) extends Atom
 
     val Void: Type = AsIs("Void")
@@ -359,34 +440,33 @@ object DocAst {
 
     val Region: Type = AsIs("Region")
 
-    def Array(t: Type): Type = App("Array", List(t))
+    val Null: Type = AsIs("Null")
 
-    def Lazy(t: Type): Type = App("Lazy", List(t))
+    val Schema: Type = AsIs("Schema")
 
-    def Ref(t: Type): Type = App("Ref", List(t))
+    val Error: Type = AsIs("Error")
 
-    def Enum(sym: Symbol.EnumSym, args: List[Type]): Type = App(sym.toString, args)
+    val Univ: Type = AsIs("Univ")
 
-    def Var(id: Int): Type = AsIs(s"var$id")
-  }
+    val Wild: Type = AsIs("_")
 
-  sealed trait Eff
+    def Arrow(args: List[Type], res: Type): Type = ArrowEff(args, res, Type.Pure)
 
-  object Eff {
+    def Alias(sym: Symbol.TypeAliasSym, args: List[Type]): Type = App(AsIs(sym.toString), args)
 
-    case object Pure extends Eff
+    def AssocType(sym: Symbol.AssocTypeSym, arg: Type): Type = App(AsIs(sym.toString), List(arg))
 
-    /** Represents the union of IO and all regions. */
-    case object Impure extends Eff
+    def Array(t: Type): Type = App(AsIs("Array"), List(t))
 
-    /** Represents Impure and all algebraic effect. */
-    case object ControlImpure extends Eff
+    def Lazy(t: Type): Type = App(AsIs("Lazy"), List(t))
 
-    case class AsIs(s: String) extends Eff
+    def Enum(sym: Symbol.EnumSym, args: List[Type]): Type = App(AsIs(sym.toString), args)
 
-    /** Represents the top effect. */
-    def Univ: Eff = AsIs("Univ")
+    def Struct(sym: Symbol.StructSym, args: List[Type]): Type = App(AsIs(sym.toString), args)
 
+    def Var(sym: Symbol.KindedTypeVarSym): Type = AsIs(sym.toString)
+
+    def Var(sym: Symbol.UnkindedTypeVarSym): Type = AsIs(sym.toString)
   }
 
 }

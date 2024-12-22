@@ -26,7 +26,7 @@ class TestFlixErrors extends AnyFunSuite with TestUtils {
 
   def expectRuntimeError(v: Validation[CompilationResult, CompilationMessage], name: String): Unit = {
     expectSuccess(v)
-    v.toHardResult match {
+    v.toResult match {
       case Result.Ok(t) => t.getMain match {
         case Some(main) => try {
           main.apply(Array.empty)
@@ -55,10 +55,10 @@ class TestFlixErrors extends AnyFunSuite with TestUtils {
   }
 
   test("SpawnedThreadError.01") {
-     val input =
+    val input =
       """
         |def main(): Unit \ IO = region rc {
-        |    spawn { bug!("Something bad happened") } @ rc;
+        |    spawn { println("err" + bug!("Something bad happened")) } @ rc;
         |    Thread.sleep(Time.Duration.fromSeconds(1))
         |}
       """.stripMargin
@@ -67,40 +67,40 @@ class TestFlixErrors extends AnyFunSuite with TestUtils {
   }
 
   test("SpawnedThreadError.02") {
-     val input =
-       """
-         |def main(): Unit \ IO = region rc {
-         |    spawn {
-         |        spawn { bug!("Something bad happened")  } @ rc
-         |    } @ rc;
-         |    Thread.sleep(Time.Duration.fromSeconds(1))
-         |}
+    val input =
+      """
+        |def main(): Unit \ IO = region rc {
+        |    spawn {
+        |        spawn { println("err" + bug!("Something bad happened")) } @ rc
+        |    } @ rc;
+        |    Thread.sleep(Time.Duration.fromSeconds(1))
+        |}
       """.stripMargin
     val result = compile(input, Options.DefaultTest)
     expectRuntimeError(result, BackendObjType.HoleError.jvmName.name)
   }
 
   test("SpawnedThreadError.03") {
-     val input =
-       """
-         |def main(): Unit \ IO = region rc {
-         |    spawn {
-         |        spawn { String.concat(checked_cast(null), "foo") } @ rc
-         |    } @ rc;
-         |    Thread.sleep(Time.Duration.fromSeconds(1))
-         |}
+    val input =
+      """
+        |def main(): Unit \ IO = region rc {
+        |    spawn {
+        |        spawn { println(String.concat(checked_cast(null), "foo")) } @ rc
+        |    } @ rc;
+        |    Thread.sleep(Time.Duration.fromSeconds(1))
+        |}
       """.stripMargin
     val result = compile(input, Options.DefaultTest)
     expectRuntimeError(result, "NullPointerException")
   }
 
   test("SpawnedThreadError.04") {
-     val input =
+    val input =
       """
-        |def main(): Unit \ IO = region rc {
-        |    let (_tx, rx) = Channel.unbuffered(rc);
+        |def main(): Unit \ {Chan, NonDet, IO} = region rc {
+        |    let (_tx, rx) = Channel.unbuffered();
         |    spawn {
-        |        spawn { String.concat(checked_cast(null), "foo") } @ rc
+        |        spawn { println(String.concat(checked_cast(null), "foo")) } @ rc
         |    } @ rc;
         |    discard Channel.recv(rx)
         |}

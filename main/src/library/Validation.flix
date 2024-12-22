@@ -18,7 +18,7 @@
 /// The Validation type.
 ///
 @MustUse
-pub enum Validation[e, t] with Eq, Order, ToString, Sendable {
+pub enum Validation[e, t] with Eq, Order, ToString {
     case Success(t),
     case Failure(Nec[e])
 }
@@ -102,7 +102,7 @@ mod Validation {
     ///
     pub def withDefault(default: {default = Validation[e, t]}, v: Validation[e, t]): Validation[e, t] = match v {
         case Success(_) => v
-        case Failure(_) => default.default
+        case Failure(_) => default#default
     }
 
     ///

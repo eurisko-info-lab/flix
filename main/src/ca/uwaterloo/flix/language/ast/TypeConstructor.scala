@@ -1,8 +1,9 @@
 package ca.uwaterloo.flix.language.ast
 
-import ca.uwaterloo.flix.language.ast.Ast.{EliminatedBy, IntroducedBy}
-import ca.uwaterloo.flix.language.phase.{Kinder, Lowering, Monomorpher}
+import ca.uwaterloo.flix.language.ast.shared.ScalaAnnotations.{EliminatedBy, IntroducedBy}
+import ca.uwaterloo.flix.language.phase.{Kinder, Lowering, Monomorpher, Simplifier}
 
+import java.lang.reflect.{Constructor, Field, Method}
 import scala.collection.immutable.SortedSet
 
 /**
@@ -138,6 +139,16 @@ object TypeConstructor {
   }
 
   /**
+    * A type constructor that represents an arrow type where the effect has been removed.
+    *
+    * Warning: This is not part of the frontend; it only exists post Simplification.
+    */
+  @IntroducedBy(Simplifier.getClass)
+  case class ArrowWithoutEffect(arity: Int) extends TypeConstructor {
+    def kind: Kind = Kind.mkArrow(arity)
+  }
+
+  /**
     * A type constructor that represents the type of empty record rows.
     */
   case object RecordRowEmpty extends TypeConstructor {
@@ -197,9 +208,9 @@ object TypeConstructor {
   @EliminatedBy(Lowering.getClass)
   case object Sender extends TypeConstructor {
     /**
-      * The shape of a sender is Sender[t, r].
+      * The shape of a sender is Sender[t].
       */
-    def kind: Kind = Kind.Star ->: Kind.Eff ->: Kind.Star
+    def kind: Kind = Kind.Star ->: Kind.Star
   }
 
   /**
@@ -208,9 +219,9 @@ object TypeConstructor {
   @EliminatedBy(Lowering.getClass)
   case object Receiver extends TypeConstructor {
     /**
-      * The shape of a sender is Receiver[t, r].
+      * The shape of a sender is Receiver[t].
       */
-    def kind: Kind = Kind.Star ->: Kind.Eff ->: Kind.Star
+    def kind: Kind = Kind.Star ->: Kind.Star
   }
 
   /**
@@ -230,6 +241,12 @@ object TypeConstructor {
   case class Enum(sym: Symbol.EnumSym, kind: Kind) extends TypeConstructor
 
   /**
+   * A type constructor that represents the type of structs.
+   */
+  @IntroducedBy(Kinder.getClass)
+  case class Struct(sym: Symbol.StructSym, kind: Kind) extends TypeConstructor
+
+  /**
     * A type constructor that represents the type of enums.
     */
   @IntroducedBy(Kinder.getClass)
@@ -238,8 +255,29 @@ object TypeConstructor {
   /**
     * A type constructor that represent the type of JVM classes.
     */
-  case class Native(clazz: Class[_]) extends TypeConstructor {
+  case class Native(clazz: Class[?]) extends TypeConstructor {
     def kind: Kind = Kind.Star
+  }
+
+  /**
+   * A type constructor that represents the type of a Java constructor.
+   * */
+  case class JvmConstructor(constructor: Constructor[?]) extends TypeConstructor {
+    def kind: Kind = Kind.Jvm
+  }
+
+  /**
+   * A type constructor that represents the type of a Java method.
+   */
+  case class JvmMethod(method: Method) extends TypeConstructor {
+    def kind: Kind = Kind.Jvm
+  }
+
+  /**
+    * A type constructor that represents the type of a Java field.
+    */
+  case class JvmField(field: Field) extends TypeConstructor {
+    def kind: Kind = Kind.Jvm
   }
 
   /**
@@ -253,23 +291,27 @@ object TypeConstructor {
   }
 
   /**
-    * A type constructor that represent the type of vectors.
+    * A type constructor that represents that represents an array type where the region has been
+    * removed.
+    *
+    * Warning: This is not part of the frontend; it only exists post Simplification.
     */
-  case object Vector extends TypeConstructor {
+  @IntroducedBy(Simplifier.getClass)
+  case object ArrayWithoutRegion extends TypeConstructor {
     /**
-      * The shape of an array is `Array[t]`.
+      * The shape of an array is `ArrayWithoutRegion[t]`.
       */
     def kind: Kind = Kind.Star ->: Kind.Star
   }
 
   /**
-    * A type constructor that represent the type of references.
+    * A type constructor that represent the type of vectors.
     */
-  case object Ref extends TypeConstructor {
+  case object Vector extends TypeConstructor {
     /**
-      * The shape of a reference is `Ref[t, l]`.
+      * The shape of a vector is `Vector[t]`.
       */
-    def kind: Kind = Kind.Star ->: Kind.Eff ->: Kind.Star
+    def kind: Kind = Kind.Star ->: Kind.Star
   }
 
   /**
@@ -367,6 +409,20 @@ object TypeConstructor {
   }
 
   /**
+    * A type constructor that represents the difference of two effect sets.
+    */
+  case object Difference extends TypeConstructor {
+    def kind: Kind = Kind.Eff ->: Kind.Eff ->: Kind.Eff
+  }
+
+  /**
+    * A type constructor that represents the exclusive or (symmetric difference) of two effect sets.
+    */
+  case object SymmetricDiff extends TypeConstructor {
+    def kind: Kind = Kind.Eff ->: Kind.Eff ->: Kind.Eff
+  }
+
+  /**
     * A type constructor that represents a single effect.
     */
   case class Effect(sym: Symbol.EffectSym) extends TypeConstructor {
@@ -412,8 +468,24 @@ object TypeConstructor {
   }
 
   /**
+    * A type constructor that represents that a region type where the region argument has been
+    * removed.
+    *
+    * I.e., The normal `Region[r]` type is `RegionWithoutRegion` where `r` has been removed.
+    *
+    * Warning: This is not part of the frontend; it only exists post Simplification.
+    */
+  @IntroducedBy(Simplifier.getClass)
+  case object RegionWithoutRegion extends TypeConstructor {
+    /**
+      * The shape of a region is RegionWithoutRegion.
+      */
+    def kind: Kind = Kind.Star
+  }
+
+  /**
     * A type constructor which represents an erroneous type of the given `kind`.
     */
-  case class Error(kind: Kind) extends TypeConstructor
+  case class Error(id: Int, kind: Kind) extends TypeConstructor
 
 }

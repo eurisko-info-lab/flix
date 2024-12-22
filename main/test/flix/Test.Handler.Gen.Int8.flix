@@ -1,16 +1,16 @@
 mod Test.Handler.Gen.Int8 {
 
     eff Gen {
-        pub def gen(): Int8
+        def gen(): Int8
     }
 
     def generator(): Unit \ Gen =
-        do Gen.gen(); generator()
+        Gen.gen(); generator()
 
     def sample(limit: Int8): List[Int8] =
         region rc {
-            let counter = ref 0i8 @ rc;
-            try {
+            let counter = Ref.fresh(rc, 0i8);
+            run {
                 generator(); Nil
             } with Gen {
                 def gen(k) =
@@ -20,7 +20,7 @@ mod Test.Handler.Gen.Int8 {
         }
 
     def getAndInc(r: Ref[Int8, r]): Int8 \ r =
-        let i = deref r;
+        let i = Ref.get(r);
         Ref.put(i + 1i8, r);
         i
 

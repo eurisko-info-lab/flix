@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
+import java.util.{Set => JSet}
+
 ///
 /// The Set type.
 ///
 /// A set is currently represented internally as a red-black tree.
 ///
-pub enum Set[t] with Sendable {
+pub enum Set[t] {
     case Set(RedBlackTree[t, Unit])
 }
 
@@ -67,12 +69,12 @@ instance Foldable[Set] {
 
 instance UnorderedFoldable[Set] {
     pub def foldMap(f: a -> b \ ef, s: Set[a]): b \ ef with CommutativeMonoid[b] = Set.foldMap(f, s)
-    override pub def isEmpty(s: Set[a]): Bool = Set.isEmpty(s)
-    override pub def exists(f: a -> Bool \ ef, s: Set[a]): Bool \ ef = Set.exists(f, s)
-    override pub def forAll(f: a -> Bool \ ef, s: Set[a]): Bool \ ef = Set.forAll(f, s)
+    redef isEmpty(s: Set[a]): Bool = Set.isEmpty(s)
+    redef exists(f: a -> Bool \ ef, s: Set[a]): Bool \ ef = Set.exists(f, s)
+    redef forAll(f: a -> Bool \ ef, s: Set[a]): Bool \ ef = Set.forAll(f, s)
 
     @ParallelWhenPure
-    override pub def count(f: a -> Bool \ ef, s: Set[a]): Int32 \ ef = Set.count(f, s)
+    redef count(f: a -> Bool \ ef, s: Set[a]): Int32 \ ef = Set.count(f, s)
 }
 
 instance SemiGroup[Set[a]] with Order[a] {
@@ -87,17 +89,25 @@ instance Monoid[Set[a]] with Order[a] {
 
 instance CommutativeMonoid[Set[a]] with Order[a]
 
-instance Collectable[Set] {
-    pub def collect(iter: Iterator[a, ef, r]): Set[a] \ { ef, r } with Order[a] = Iterator.toSet(iter)
+instance Collectable[Set[a]] with Order[a] {
+    type Elm = a
+    pub def collect(iter: Iterator[a, ef, r]): Set[a] \ { ef, r } = Iterator.toSet(iter)
 }
 
-instance Iterable[Set] {
+instance Iterable[Set[a]] {
+    type Elm = a
     pub def iterator(rc: Region[r], s: Set[a]): Iterator[a, r, r] \ r = Set.iterator(rc, s)
 }
 
 instance ToJava[Set[a]] with Order[a] {
-    type O = ##java.util.Set
-    pub def toJava(s: Set[a]): ##java.util.Set \ IO = Adaptor.toSet(s)
+    type Out = JSet
+    type Aef = IO
+    pub def toJava(s: Set[a]): JSet \ IO = Adaptor.toSet(s)
+}
+
+instance ToFlix[Set[a]] with Order[a] {
+    type In = JSet
+    pub def toFlix(s: JSet): Set[a] = Adaptor.fromSet(s)
 }
 
 mod Set {
@@ -106,25 +116,8 @@ mod Set {
     /// Returns a string representation of the given set `s`.
     ///
     pub def toString(s: Set[a]): String with ToString[a] = region rc {
-        let sb = StringBuilder.empty(rc);
-        StringBuilder.appendString!("Set#{", sb);
-        forEachWithIndex((i, x) -> {
-            if (i == 0)
-                StringBuilder.appendString!("${x}", sb)
-            else
-                StringBuilder.appendString!(", ${x}", sb)
-        }, s);
-        StringBuilder.appendString!("}", sb);
-        StringBuilder.toString(sb)
+        "Set#{" + (Set.iterator(rc, s) |> Iterator.join(", ")) + "}"
     }
-
-    ///
-    /// Returns the number of threads to use for parallel evaluation.
-    ///
-    def threads(): Int32 =
-        // Note: We use a multiple of the number of physical cores for better performance.
-        let multiplier = 4;
-        multiplier * Environment.getVirtualProcessors()
 
     ///
     /// Determines whether to use parallel evaluation.
@@ -137,7 +130,7 @@ mod Set {
         minSize >= 1024
 
     ///
-    /// Returns the size of `s`.
+    /// Returns the number of elements in `s`.
     ///
     pub def size(s: Set[a]): Int32 =
         let Set(t) = s;
@@ -228,7 +221,7 @@ mod Set {
                 if (useParallelEvaluation(s))
                     let h = (kl, _, kr, _) -> g(kl, kr);
                     let Set(t) = s;
-                    let o = RedBlackTree.parMinimumBy(threads() - 1, h, t);
+                    let o = RedBlackTree.parMinimumBy(h, t);
                     Option.map(fst, o)
                 else
                     min()
@@ -259,7 +252,7 @@ mod Set {
                 if (useParallelEvaluation(s))
                     let h = (kl, _, kr, _) -> g(kl, kr);
                     let Set(t) = s;
-                    let o = RedBlackTree.parMaximumBy(threads() - 1, h, t);
+                    let o = RedBlackTree.parMaximumBy(h, t);
                     Option.map(fst, o)
                 else
                     max()
@@ -364,7 +357,7 @@ mod Set {
                 if (useParallelEvaluation(s))
                     let h = (k, _) -> g(k);
                     let Set(t) = s;
-                    RedBlackTree.parCount(threads() - 1, h, t)
+                    RedBlackTree.parCount(h, t)
                 else
                     foldLeft((b, k) -> if (f(k)) b + 1 else b, 0, s)
             case Purity.Impure(g) => foldLeft((b, k) -> if (g(k)) b + 1 else b, 0, s)
@@ -388,7 +381,7 @@ mod Set {
         match purityOf(f) {
             case Purity.Pure(g) =>
                 if (useParallelEvaluation(s))
-                    RedBlackTree.parSumWith(threads() - 1, (k, _) -> g(k), t)
+                    RedBlackTree.parSumWith((k, _) -> g(k), t)
                 else
                     sw()
             case Purity.Impure(_) => sw()
@@ -484,7 +477,7 @@ mod Set {
     /// Note: The returned set may be smaller than `s`.
     ///
     pub def replace(src: {src = a}, dst: {dst = a}, s: Set[a]): Set[a] with Order[a] =
-        if (memberOf(src.src, s)) insert(dst.dst, remove(src.src, s)) else s
+        if (memberOf(src#src, s)) insert(dst#dst, remove(src#src, s)) else s
 
     ///
     /// Returns a pair of sets `(s1, s2)`.
@@ -506,6 +499,26 @@ mod Set {
     ///
     pub def toList(s: Set[a]): List[a] =
         foldRight((x, acc) -> x :: acc, Nil, s)
+
+    ///
+    /// Returns the set `s` as an array.
+    ///
+    pub def toArray(rc: Region[r], s: Set[a]): Array[a, r] \ r = match size(s) {
+        case 0  => Array#{} @ rc
+        case sz =>
+            let a = Array.empty(rc, sz);
+            Iterator.forEachWithIndex((i, b) -> Array.put(b, i, a), iterator(rc, s));
+            a
+        }
+
+    ///
+    /// Returns the set `s` as a vector.
+    ///
+    pub def toVector(s: Set[a]): Vector[a] = region rc {
+        let arr = Array.empty(rc, size(s));
+        Iterator.forEachWithIndex((i, x) -> Array.put(x, i, arr), iterator(rc, s));
+        Array.toVector(arr)
+    }
 
     ///
     /// Returns the set `s` as a chain.
@@ -540,7 +553,7 @@ mod Set {
     /// Returns the set `s` as a `MutSet`.
     ///
     pub def toMutSet(rc: Region[r], s: Set[a]): MutSet[a, r] \ r =
-        MutSet.MutSet(rc, ref s @ rc)
+        MutSet.MutSet(rc, Ref.fresh(rc, s))
 
     ///
     /// Applies `f` to every element of `s`.
@@ -566,7 +579,7 @@ mod Set {
     pub def unfold(f: s -> Option[(a, s)] \ ef, st: s): Set[a] \ ef with Order[a] =
         def loop(sst, s) = match f(sst) {
             case None         => s
-            case Some(a, st1) => loop(st1, insert(a, s))
+            case Some((a, st1)) => loop(st1, insert(a, s))
         };
         loop(st, empty())
 

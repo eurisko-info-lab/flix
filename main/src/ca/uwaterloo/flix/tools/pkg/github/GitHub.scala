@@ -18,8 +18,8 @@ package ca.uwaterloo.flix.tools.pkg.github
 import ca.uwaterloo.flix.tools.pkg.{PackageError, ReleaseError, SemVer}
 import ca.uwaterloo.flix.util.Result.{Err, Ok}
 import ca.uwaterloo.flix.util.{Result, StreamOps}
-import org.json4s.JsonDSL._
-import org.json4s._
+import org.json4s.JsonDSL.*
+import org.json4s.*
 import org.json4s.JsonAST.{JArray, JValue}
 import org.json4s.native.JsonMethods.{compact, parse, render}
 
@@ -242,19 +242,6 @@ object GitHub {
   }
 
   /**
-    * Gets the project release with the highest semantic version.
-    */
-  def getLatestRelease(project: Project, apiKey: Option[String]): Result[Release, PackageError] = {
-    getReleases(project, apiKey).flatMap {
-      releases =>
-        releases.maxByOption(_.version) match {
-          case None => Err(PackageError.NoReleasesFound(project))
-          case Some(latest) => Ok(latest)
-        }
-    }
-  }
-
-  /**
     * Gets the project release with the relevant semantic version.
     */
   def getSpecificRelease(project: Project, version: SemVer, apiKey: Option[String]): Result[Release, PackageError] = {
@@ -328,7 +315,7 @@ object GitHub {
   private def parseSemVer(string: String): SemVer = {
     val semVer = """v(\d+)\.(\d+)\.(\d+)""".r
     string match {
-      case semVer(major, minor, patch) => SemVer(major.toInt, minor.toInt, Some(patch.toInt), None, None)
+      case semVer(major, minor, patch) => SemVer(major.toInt, minor.toInt, patch.toInt)
       case _ => throw new RuntimeException(s"Invalid semantic version: $string")
     }
   }

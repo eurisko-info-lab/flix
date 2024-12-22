@@ -30,19 +30,37 @@ sealed trait NameError extends CompilationMessage {
 object NameError {
 
   /**
+    * An error raised to indicate a deprecated feature
+    * *
+    * @param loc the location of the deprecated feature.
+    */
+  case class Deprecated(loc: SourceLocation) extends NameError {
+    def summary: String = s"Deprecated feature."
+
+    def message(formatter: Formatter): String = {
+      import formatter.*
+      s""">> Deprecated feature. Use --Xdeprecated to enable.
+         |
+         |${code(loc, "deprecated")}
+         |""".stripMargin
+    }
+
+    override def explain(formatter: Formatter): Option[String] = None
+  }
+
+  /**
     * An error raised to indicate that the given `name` is defined multiple time.
     *
     * @param name the name.
     * @param loc1 the location of the first name.
     * @param loc2 the location of the second name.
     */
-  case class DuplicateLowerName(name: String, loc1: SourceLocation, loc2: SourceLocation) extends NameError with Recoverable {
+  case class DuplicateLowerName(name: String, loc1: SourceLocation, loc2: SourceLocation) extends NameError {
     def summary: String = s"Duplicate definition of '$name'."
 
     def message(formatter: Formatter): String = {
-      import formatter._
-      s"""${line(kind, source.name)}
-         |>> Duplicate definition of '${red(name)}'.
+      import formatter.*
+      s""">> Duplicate definition of '${red(name)}'.
          |
          |${code(loc1, "the first definition was here.")}
          |
@@ -71,13 +89,12 @@ object NameError {
     * @param loc1 the location of the first name.
     * @param loc2 the location of the second name.
     */
-  case class DuplicateUpperName(name: String, loc1: SourceLocation, loc2: SourceLocation) extends NameError with Recoverable {
+  case class DuplicateUpperName(name: String, loc1: SourceLocation, loc2: SourceLocation) extends NameError {
     def summary: String = s"Duplicate definition of '$name'."
 
     def message(formatter: Formatter): String = {
-      import formatter._
-      s"""${line(kind, source.name)}
-         |>> Duplicate definition of '${red(name)}'.
+      import formatter.*
+      s""">> Duplicate definition of '${red(name)}'.
          |
          |${code(loc1, "the first definition was here.")}
          |
@@ -95,14 +112,12 @@ object NameError {
     * @param name the name of the type variable.
     * @param loc  the location of the suspicious type variable.
     */
-  case class SuspiciousTypeVarName(name: String, loc: SourceLocation) extends NameError with Recoverable {
+  case class SuspiciousTypeVarName(name: String, loc: SourceLocation) extends NameError {
     def summary: String = s"Suspicious type variable '$name'. Did you mean: '${name.capitalize}'?"
 
     def message(formatter: Formatter): String = {
-      import formatter._
-      s"""${line(kind, source.name)}
-         |
-         |>> Suspicious type variable '${red(name)}'. Did you mean: '${cyan(name.capitalize)}'?
+      import formatter.*
+      s""">> Suspicious type variable '${red(name)}'. Did you mean: '${cyan(name.capitalize)}'?
          |
          |${code(loc, "suspicious type variable.")}
          |""".stripMargin

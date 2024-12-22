@@ -13,132 +13,167 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-mod Environment {
+eff Environment {
 
     ///
     /// Returns the arguments passed to the program via the command line.
     ///
-    pub def getArgs(): List[String] = region rc {
-        import static dev.flix.runtime.Global.getArgs(): Array[String, rc] \ rc;
-        let _ = rc; // Avoids redundancy error.
-        Array.toList(getArgs())
-    }
+    def getArgs(): List[String]
 
     ///
     /// Returns an map of the current system environment.
     ///
-    pub def getEnv(): Map[String, String] = region rc {
-        import static java.lang.System.getenv(): ##java.util.Map \ rc;
-        import java.util.Map.entrySet(): ##java.util.Set \ { rc };
-        import java.util.Set.iterator(): ##java.util.Iterator \ { rc };
-        let _ = rc; // Avoids redundancy error.
-        try {
-            let iter = getenv() |> entrySet |> iterator;
-            getEnvHelper(iter, Map.empty())
-        } catch {
-            case _:##java.lang.Exception => Map.empty()
-        }
-    }
+    def getEnv(): Map[String, String]
 
     ///
     /// Returns the value of the specified environment variable.
     ///
-    pub def getVar(name: String): Option[String] =
-        import static java.lang.System.getenv(String): String \ {};
-        try {
-            let result = getenv(name);
-            Object.toOption(result)
-        } catch {
-            case _:##java.lang.Exception => None
-        }
+    def getVar(name: String): Option[String]
 
     ///
     /// Returns the system property by name.
     ///
-    pub def getProp(name: String): Option[String] =
-        import static java.lang.System.getProperty(String): String \ {};
-        try {
-            let result = getProperty(name);
-            Object.toOption(result)
-        } catch {
-            case _:##java.lang.Exception => None
-        }
+    def getProp(name: String): Option[String]
 
     ///
     /// Returns the operating system name
     ///
-    pub def getOsName(): Option[String] = getProp("os.name")
+    def getOsName(): Option[String]
 
     ///
     ///  Returns the operating system architecture
     ///
-    pub def getOsArch(): Option[String] = getProp("os.arch")
+    def getOsArch(): Option[String]
 
     ///
     ///  Returns the operating system version
     ///
-    pub def getOsVersion(): Option[String] = getProp("os.version")
+    def getOsVersion(): Option[String]
 
     ///
     ///  Returns the file separator
     ///
-    pub def getFileSeparator(): String =
-        import static java_get_field java.io.File.separator: String \ {} as sep;
-        sep()
+    def getFileSeparator(): String
 
     ///
     /// Returns the path separator
     ///
-    pub def getPathSeparator(): String =
-        import static java_get_field java.io.File.pathSeparator: String \ {} as pathSep;
-        pathSep()
+    def getPathSeparator(): String
 
     ///
     /// Returns the system line separator
     ///
-    pub def getLineSeparator(): String =
-        import static java.lang.System.lineSeparator(): String \ {};
-        lineSeparator()
+    def getLineSeparator(): String
 
     ///
     /// Returns the user's current working directory
     ///
-    pub def getCurrentWorkingDirectory(): Option[String] = getProp("user.dir")
+    def getCurrentWorkingDirectory(): Option[String]
 
     ///
     /// Returns the default temp file path
     ///
-    pub def getTemporaryDirectory(): Option[String] = getProp("java.io.tmpdir")
+    def getTemporaryDirectory(): Option[String]
 
     ///
     /// Returns the user's account name
     ///
-    pub def getUserName(): Option[String] = getProp("user.name")
+    def getUserName(): Option[String]
 
     ///
     /// Returns the user's home directory
     ///
-    pub def getUserHomeDirectory(): Option[String] = getProp("user.home")
+    def getUserHomeDirectory(): Option[String]
 
     ///
     /// Returns the number of virtual processors available to the JVM.
     ///
     /// The returned value is never less than one.
     ///
-    pub def getVirtualProcessors(): Int32 =
-        import static java.lang.Runtime.getRuntime(): ##java.lang.Runtime \ {};
-        import java.lang.Runtime.availableProcessors(): Int32 \ {};
-        (getRuntime() |> availableProcessors)
+    def getVirtualProcessors(): Int32
 
-    def getEnvHelper(iter: ##java.util.Iterator, m: Map[String, String]): Map[String, String] =
-        import java.util.Iterator.hasNext(): Bool \ {};
-        import java.util.Iterator.next(): ##java.lang.Object \ {};
-        import java.util.Map$Entry.getKey(): ##java.lang.Object \ {};
-        import java.util.Map$Entry.getValue(): ##java.lang.Object \ {};
-        if (hasNext(iter))
-            let e = unchecked_cast(next(iter) as ##java.util.Map$Entry);
-            let k = unchecked_cast(getKey(e) as String);
-            let v = unchecked_cast(getValue(e) as String);
+}
+
+mod Environment {
+
+    import dev.flix.runtime.Global
+    import java.lang.Exception
+    import java.lang.Runtime
+    import java.lang.System
+    import java.io.{File => JFile}
+    import java.util.{Iterator => JIterator}
+    import java.util.{Map => JMap}
+    import java.util.{Set => JSet}
+    import java.util.{Map$Entry => Entry}
+
+    ///
+    /// Handles the `Environment` effect of the given function `f`.
+    ///
+    /// In other words, re-interprets the `Environment` effect using the `Sys` and `IO` effects.
+    ///
+    pub def handle(f: a -> b \ ef): a -> b \ (ef - Environment) + {Sys, IO} = x ->
+        run {
+            f(x)
+        } with Environment {
+            def getArgs(k) =
+                k(unsafe Array.toList(Global.getArgs()))
+
+            def getEnv(k) = region rc {
+                try {
+                    let _ = rc;
+                    let iter = unchecked_cast ((System.getenv().entrySet().iterator()) as _ \ rc);
+                    k(getEnvHelper(iter, Map.empty()))
+                } catch {
+                    case _: Exception => k(Map.empty())
+                }
+            }
+
+            def getVar(name, k) =
+                try {
+                    let result = unsafe System.getenv(name);
+                    k(Object.toOption(result))
+                } catch {
+                    case _: Exception => k(None)
+                }
+
+            def getProp(name, k) = k(getPropHelper(name))
+
+            def getOsName(k) = k(getPropHelper("os.name"))
+
+            def getOsArch(k) = k(getPropHelper("os.arch"))
+
+            def getOsVersion(k) = k(getPropHelper("os.version"))
+
+            def getFileSeparator(k) = k(unsafe JFile.separator)
+
+            def getPathSeparator(k) = k(unsafe JFile.pathSeparator)
+
+            def getLineSeparator(k) = k(unsafe System.lineSeparator())
+
+            def getCurrentWorkingDirectory(k) = k(getPropHelper("user.dir"))
+
+            def getTemporaryDirectory(k) = k(getPropHelper("java.io.tmpdir"))
+
+            def getUserName(k) = k(getPropHelper("user.name"))
+
+            def getUserHomeDirectory(k) = k(getPropHelper("user.home"))
+
+            def getVirtualProcessors(k) = k(unsafe Runtime.getRuntime().availableProcessors())
+        }
+
+    def getPropHelper(name: String): Option[String] \ {Sys, IO} =
+            try {
+                let result = System.getProperty(name);
+                Object.toOption(result)
+            } catch {
+                case _: Exception => None
+            }
+
+    def getEnvHelper(iter: JIterator, m: Map[String, String]): Map[String, String] =
+        if (unsafe iter.hasNext())
+            let e = unsafe unchecked_cast(iter.next() as Entry);
+            let k = unsafe unchecked_cast(e.getKey() as String);
+            let v = unsafe unchecked_cast(e.getValue() as String);
             getEnvHelper(iter, Map.insert(k, v, m))
         else
             m
