@@ -16,8 +16,8 @@
  */
 package ca.uwaterloo.flix.language.phase.extra
 
-import ca.uwaterloo.flix.api.lsp.acceptors.AllAcceptor
-import ca.uwaterloo.flix.api.lsp.{Consumer, Visitor}
+import ca.uwaterloo.flix.language.phase.acceptors.AllAcceptor
+import ca.uwaterloo.flix.language.phase.{Consumer, Visitor}
 import ca.uwaterloo.flix.language.ast.TypedAst.*
 import ca.uwaterloo.flix.language.ast.shared.SymUse.{DefSymUse, TraitSymUse}
 import ca.uwaterloo.flix.language.ast.shared.{Annotations, SymUse, TraitConstraint}

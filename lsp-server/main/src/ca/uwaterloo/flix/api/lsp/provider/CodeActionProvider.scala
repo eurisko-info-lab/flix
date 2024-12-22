@@ -16,7 +16,8 @@
  */
 package ca.uwaterloo.flix.api.lsp.provider
 
-import ca.uwaterloo.flix.api.lsp.{CodeAction, CodeActionKind, Position, Range, TextEdit, WorkspaceEdit}
+import ca.uwaterloo.flix.api.lsp.{CodeAction, CodeActionKind, Range, TextEdit, WorkspaceEdit}
+import ca.uwaterloo.flix.language.phase.Position
 import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.{Name, SourceLocation, SourcePosition, Symbol, Type, TypeConstructor, TypedAst}
 import ca.uwaterloo.flix.language.ast.TypedAst.Root

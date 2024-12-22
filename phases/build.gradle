@@ -9,11 +9,11 @@ repositories {
 dependencies {
     implementation project(':ast')
     implementation project(':core')
-    implementation project(':lsp-server')
     implementation project(':jvm-codegen')
 
     implementation 'org.scala-lang:scala3-library_3:3.6.2!!'
 
+    implementation('org.json4s:json4s-native_3:4.0.7')
     implementation("com.lihaoyi:sourcecode_3:0.4.2")
     implementation('org.ow2.asm:asm:9.7')
 

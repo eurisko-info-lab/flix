@@ -13,14 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ca.uwaterloo.flix.api.lsp.acceptors
+package ca.uwaterloo.flix.language.phase.acceptors
 
-import ca.uwaterloo.flix.api.lsp.Acceptor
 import ca.uwaterloo.flix.language.ast.SourceLocation
+import ca.uwaterloo.flix.language.phase.Acceptor
 
 /**
-  * Acceptor that accepts all AST nodes.
+  * Acceptor that accepts all AST nodes whose `SourceLocation` is within
+  * the file given by the path `uri`.
+  *
+  * @param uri  the path of the file that an AST node [[SourceLocation]] must be within to be accepted.
   */
-case object AllAcceptor extends Acceptor {
-  def accept(loc: SourceLocation): Boolean = true
+case class FileAcceptor(uri: String) extends Acceptor {
+  def accept(loc: SourceLocation): Boolean = uri == loc.source.name
 }

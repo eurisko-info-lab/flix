@@ -13,16 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ca.uwaterloo.flix.api.lsp
+package ca.uwaterloo.flix.language.phase.acceptors
 
 import ca.uwaterloo.flix.language.ast.SourceLocation
+import ca.uwaterloo.flix.language.phase.Acceptor
 
-trait Acceptor {
-  /**
-    * Defines whether an AST node is visited based on its [[SourceLocation]]
-    *
-    * @param loc  [[SourceLocation]] of the AST node
-    * @return     true if the AST node should be visited, `false` otherwise
-    */
-  def accept(loc: SourceLocation): Boolean
+/**
+  * Acceptor that accepts all AST nodes.
+  */
+case object AllAcceptor extends Acceptor {
+  def accept(loc: SourceLocation): Boolean = true
 }

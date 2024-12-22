@@ -15,7 +15,8 @@
  */
 package ca.uwaterloo.flix.api.lsp.provider.completion
 
-import ca.uwaterloo.flix.api.lsp.{Position, Range}
+import ca.uwaterloo.flix.api.lsp.Range
+import ca.uwaterloo.flix.language.phase.Position
 
 /**
   * Represents a completion context.

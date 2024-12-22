@@ -15,6 +15,7 @@
  */
 package ca.uwaterloo.flix.api.lsp
 
+import ca.uwaterloo.flix.language.phase.{Position, Visitor}
 import ca.uwaterloo.flix.language.ast.shared.{Input, SecurityContext, Source}
 import ca.uwaterloo.flix.language.ast.{SourceLocation, SourcePosition}
 

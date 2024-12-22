@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ca.uwaterloo.flix.api.lsp.acceptors
+package ca.uwaterloo.flix.language.phase.acceptors
 
-import ca.uwaterloo.flix.api.lsp.Visitor.inside
-import ca.uwaterloo.flix.api.lsp.{Acceptor, Position}
 import ca.uwaterloo.flix.language.ast.SourceLocation
+import ca.uwaterloo.flix.language.phase.Visitor.inside
+import ca.uwaterloo.flix.language.phase.{Acceptor, Position}
 
 /**
   * Acceptor that accepts an AST node if it contains a given position.

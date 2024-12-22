@@ -16,9 +16,10 @@
  */
 package ca.uwaterloo.flix.api.lsp.provider
 
-import ca.uwaterloo.flix.api.lsp.*
-import ca.uwaterloo.flix.api.lsp.acceptors.InsideAcceptor
-import ca.uwaterloo.flix.api.lsp.consumers.StackConsumer
+import ca.uwaterloo.flix.api.lsp.{LocationLink, ResponseStatus}
+import ca.uwaterloo.flix.language.phase.{Position, Visitor}
+import ca.uwaterloo.flix.language.phase.acceptors.InsideAcceptor
+import ca.uwaterloo.flix.language.phase.consumers.StackConsumer
 import ca.uwaterloo.flix.language.ast.TypedAst.Root
 import ca.uwaterloo.flix.language.ast.shared.{AssocTypeConstructor, EqualityConstraint, SymUse, TraitConstraint}
 import ca.uwaterloo.flix.language.ast.{Symbol, Type, TypeConstructor, TypedAst}

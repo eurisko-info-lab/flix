@@ -15,8 +15,9 @@
  */
 package ca.uwaterloo.flix.api.lsp.provider.completion
 
+import ca.uwaterloo.flix.api.lsp.Range
 import ca.uwaterloo.flix.language.ast.{SourceLocation, SourcePosition, Symbol, Type, TypeConstructor, TypedAst}
-import ca.uwaterloo.flix.api.lsp.{Position, Range}
+import ca.uwaterloo.flix.language.phase.Position
 import ca.uwaterloo.flix.language.errors.TypeError
 
 object MagicMatchCompleter {

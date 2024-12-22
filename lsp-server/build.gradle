@@ -9,14 +9,15 @@ repositories {
 dependencies {
     implementation project(':ast')
     implementation project(':core')
+    implementation project(':phases')
 
     implementation 'org.scala-lang:scala3-library_3:3.6.2!!'
 
     // Java implementation of LSP.
     implementation 'org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1'
 
-    implementation('org.java-websocket:Java-WebSocket:1.6.0')
     implementation('org.json4s:json4s-native_3:4.0.7')
+    implementation('org.java-websocket:Java-WebSocket:1.6.0')
     implementation("com.lihaoyi:sourcecode_3:0.4.2")
 
     testImplementation platform('org.junit:junit-bom:5.10.0')

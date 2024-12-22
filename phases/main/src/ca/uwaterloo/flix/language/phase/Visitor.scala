@@ -13,11 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ca.uwaterloo.flix.api.lsp
+package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.language.ast.TypedAst.Pattern.*
 import ca.uwaterloo.flix.language.ast.TypedAst.Pattern.Record.RecordLabelPattern
-import ca.uwaterloo.flix.language.ast.TypedAst.{AssocTypeDef, Instance, *}
+import ca.uwaterloo.flix.language.ast.TypedAst
+import ca.uwaterloo.flix.language.ast.TypedAst.*
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.ast.shared.SymUse.*
 import ca.uwaterloo.flix.language.ast.{SourceLocation, Type}
@@ -111,8 +112,8 @@ object Visitor {
     tpes.foreach(visitType)
   }
 
-  private def visitInstance(ins: Instance)(implicit a: Acceptor, c: Consumer): Unit = {
-    val Instance(_, ann, _, trt, _, tconstrs, assocs, defs, _, loc) = ins
+  private def visitInstance(ins: TypedAst.Instance)(implicit a: Acceptor, c: Consumer): Unit = {
+    val TypedAst.Instance(_, ann, _, trt, _, tconstrs, assocs, defs, _, loc) = ins
     if (!a.accept(loc)) {
       return
     }
@@ -156,8 +157,8 @@ object Visitor {
     c.consumeTraitConstraintHead(tcHead)
   }
 
-  private def visitAssocTypeDef(tdefn: AssocTypeDef)(implicit a: Acceptor, c: Consumer): Unit = {
-    val AssocTypeDef(_, _, symUse, arg, _, loc) = tdefn
+  private def visitAssocTypeDef(tdefn: TypedAst.AssocTypeDef)(implicit a: Acceptor, c: Consumer): Unit = {
+    val TypedAst.AssocTypeDef(_, _, symUse, arg, _, loc) = tdefn
     if (!a.accept(loc)) {
       return
     }

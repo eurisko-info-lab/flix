@@ -17,7 +17,6 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.language.{CompilationMessage, GenSym}
 import ca.uwaterloo.flix.language.ast.*
 import ca.uwaterloo.flix.language.ast.Kind.WildCaseSet
 import ca.uwaterloo.flix.language.ast.TypeConstructor.{Arrow, Enum, RestrictableEnum, Struct}
@@ -28,6 +27,7 @@ import ca.uwaterloo.flix.language.dbg.AstPrinter.*
 import ca.uwaterloo.flix.language.errors.KindError
 import ca.uwaterloo.flix.language.phase.unification.EqualityEnvironment
 import ca.uwaterloo.flix.language.phase.unification.KindUnification.unify
+import ca.uwaterloo.flix.language.{CompilationMessage, GenSym}
 import ca.uwaterloo.flix.util.{InternalCompilerException, ParOps}
 
 import java.util.concurrent.ConcurrentLinkedQueue

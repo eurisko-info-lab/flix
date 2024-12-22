@@ -1,8 +1,8 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.api.lsp.{Consumer, Visitor}
-import ca.uwaterloo.flix.api.lsp.acceptors.AllAcceptor
+import ca.uwaterloo.flix.language.phase.{Consumer, Visitor}
+import ca.uwaterloo.flix.language.phase.acceptors.AllAcceptor
 import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.{SourceLocation, Type, TypeConstructor, TypedAst}
 import ca.uwaterloo.flix.language.ast.TypedAst.Root

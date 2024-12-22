@@ -13,14 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ca.uwaterloo.flix.api.lsp
+package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.language.ast.SourceLocation
 import ca.uwaterloo.flix.util.Result
 import ca.uwaterloo.flix.util.Result.{Err, Ok}
-
-import org.json4s.JsonDSL.*
 import org.json4s.*
+import org.json4s.JsonDSL.*
 
 /**
   * Companion object for [[Position]].

@@ -16,9 +16,9 @@
 package ca.uwaterloo.flix.api.lsp.provider.completion
 
 import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.api.lsp.acceptors.InsideAcceptor
-import ca.uwaterloo.flix.api.lsp.consumers.StackConsumer
-import ca.uwaterloo.flix.api.lsp.{Position, Visitor}
+import ca.uwaterloo.flix.language.phase.acceptors.InsideAcceptor
+import ca.uwaterloo.flix.language.phase.consumers.StackConsumer
+import ca.uwaterloo.flix.language.phase.{Position, Visitor}
 import ca.uwaterloo.flix.language.ast.shared.Scope
 import ca.uwaterloo.flix.language.ast.{Kind, RigidityEnv, SourceLocation, Symbol, Type, TypedAst}
 import ca.uwaterloo.flix.language.fmt.FormatOptions
