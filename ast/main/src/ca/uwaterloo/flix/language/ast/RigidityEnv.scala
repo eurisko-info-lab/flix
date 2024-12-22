@@ -19,7 +19,6 @@ import ca.uwaterloo.flix.language.ast.shared.Scope
 
 import scala.collection.immutable.SortedSet
 
-
 object RigidityEnv {
   /**
     * The empty rigidity environment.

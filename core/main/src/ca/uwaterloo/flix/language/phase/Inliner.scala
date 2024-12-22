@@ -17,10 +17,12 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.language.CompilationMessage
+import ca.uwaterloo.flix.language.{CompilationMessage, GenSym}
+import ca.uwaterloo.flix.language.ast.LiftedAst.Expr.Stm
 import ca.uwaterloo.flix.language.ast.OccurrenceAst.Occur.*
 import ca.uwaterloo.flix.language.ast.Purity.Pure
 import ca.uwaterloo.flix.language.ast.shared.Constant
+import ca.uwaterloo.flix.language.ast.shared.ScalaAnnotations.IntroducedBy
 import ca.uwaterloo.flix.language.ast.{AtomicOp, LiftedAst, OccurrenceAst, Purity, Symbol}
 import ca.uwaterloo.flix.util.collection.MapOps
 import ca.uwaterloo.flix.util.{ParOps, Validation}
@@ -28,6 +30,7 @@ import ca.uwaterloo.flix.util.{ParOps, Validation}
 /**
   * The inliner replaces closures and functions by their code to improve performance.
   */
+@IntroducedBy(Stm.getClass)
 object Inliner {
 
   sealed trait Expr
@@ -327,6 +330,8 @@ object Inliner {
     * Substitute variables in `exp0` via the filled substitution map `env0`
     */
   private def bindFormals(exp0: OccurrenceAst.Expr, symbols: List[(OccurrenceAst.FormalParam, OccurrenceAst.Occur)], args: List[LiftedAst.Expr], env0: Map[Symbol.VarSym, Symbol.VarSym])(implicit root: OccurrenceAst.Root, flix: Flix): LiftedAst.Expr = {
+    implicit val genSym: GenSym = flix.genSym
+
     (symbols, args) match {
       case ((_, occur) :: nextSymbols, e1 :: nextExpressions) if isDeadAndPure(occur, e1) =>
         // if the parameter is unused and the argument is pure, then throw it away.
@@ -363,91 +368,95 @@ object Inliner {
   /**
     * Substitute variables in `exp0` for new fresh variables in `env0`
     */
-  private def substituteExp(exp0: OccurrenceAst.Expr, env0: Map[Symbol.VarSym, Symbol.VarSym])(implicit root: OccurrenceAst.Root, flix: Flix): LiftedAst.Expr = exp0 match {
-    case OccurrenceAst.Expr.Cst(cst, tpe, loc) => LiftedAst.Expr.Cst(cst, tpe, loc)
+  private def substituteExp(exp0: OccurrenceAst.Expr, env0: Map[Symbol.VarSym, Symbol.VarSym])(implicit root: OccurrenceAst.Root, flix: Flix): LiftedAst.Expr = {
+    implicit val genSym: GenSym = flix.genSym
 
-    case OccurrenceAst.Expr.Var(sym, tpe, loc) => LiftedAst.Expr.Var(env0.getOrElse(sym, sym), tpe, loc)
+    exp0 match {
+      case OccurrenceAst.Expr.Cst(cst, tpe, loc) => LiftedAst.Expr.Cst(cst, tpe, loc)
 
-    case OccurrenceAst.Expr.ApplyAtomic(op, exps, tpe, purity, loc) =>
-      val es = exps.map(substituteExp(_, env0))
-      LiftedAst.Expr.ApplyAtomic(op, es, tpe, purity, loc)
+      case OccurrenceAst.Expr.Var(sym, tpe, loc) => LiftedAst.Expr.Var(env0.getOrElse(sym, sym), tpe, loc)
 
-    case OccurrenceAst.Expr.ApplyClo(exp1, exp2, tpe, purity, loc) =>
-      val e1 = substituteExp(exp1, env0)
-      val e2 = substituteExp(exp2, env0)
-      LiftedAst.Expr.ApplyClo(e1, e2, tpe, purity, loc)
+      case OccurrenceAst.Expr.ApplyAtomic(op, exps, tpe, purity, loc) =>
+        val es = exps.map(substituteExp(_, env0))
+        LiftedAst.Expr.ApplyAtomic(op, es, tpe, purity, loc)
 
-    case OccurrenceAst.Expr.ApplyDef(sym, exps, tpe, purity, loc) =>
-      val es = exps.map(substituteExp(_, env0))
-      LiftedAst.Expr.ApplyDef(sym, es, tpe, purity, loc)
+      case OccurrenceAst.Expr.ApplyClo(exp1, exp2, tpe, purity, loc) =>
+        val e1 = substituteExp(exp1, env0)
+        val e2 = substituteExp(exp2, env0)
+        LiftedAst.Expr.ApplyClo(e1, e2, tpe, purity, loc)
 
-    case OccurrenceAst.Expr.IfThenElse(exp1, exp2, exp3, tpe, purity, loc) =>
-      val e1 = substituteExp(exp1, env0)
-      val e2 = substituteExp(exp2, env0)
-      val e3 = substituteExp(exp3, env0)
-      LiftedAst.Expr.IfThenElse(e1, e2, e3, tpe, purity, loc)
+      case OccurrenceAst.Expr.ApplyDef(sym, exps, tpe, purity, loc) =>
+        val es = exps.map(substituteExp(_, env0))
+        LiftedAst.Expr.ApplyDef(sym, es, tpe, purity, loc)
 
-    case OccurrenceAst.Expr.Branch(exp, branches, tpe, purity, loc) =>
-      val e = substituteExp(exp, env0)
-      val bs = branches.map {
-        case (sym, br) => sym -> substituteExp(br, env0)
-      }
-      LiftedAst.Expr.Branch(e, bs, tpe, purity, loc)
+      case OccurrenceAst.Expr.IfThenElse(exp1, exp2, exp3, tpe, purity, loc) =>
+        val e1 = substituteExp(exp1, env0)
+        val e2 = substituteExp(exp2, env0)
+        val e3 = substituteExp(exp3, env0)
+        LiftedAst.Expr.IfThenElse(e1, e2, e3, tpe, purity, loc)
 
-    case OccurrenceAst.Expr.JumpTo(sym, tpe, purity, loc) => LiftedAst.Expr.JumpTo(sym, tpe, purity, loc)
+      case OccurrenceAst.Expr.Branch(exp, branches, tpe, purity, loc) =>
+        val e = substituteExp(exp, env0)
+        val bs = branches.map {
+          case (sym, br) => sym -> substituteExp(br, env0)
+        }
+        LiftedAst.Expr.Branch(e, bs, tpe, purity, loc)
 
-    case OccurrenceAst.Expr.Let(sym, exp1, exp2, _, tpe, purity, loc) =>
-      val freshVar = Symbol.freshVarSym(sym)
-      val env1 = env0 + (sym -> freshVar)
-      val e1 = substituteExp(exp1, env1)
-      val e2 = substituteExp(exp2, env1)
-      LiftedAst.Expr.Let(freshVar, e1, e2, tpe, purity, loc)
+      case OccurrenceAst.Expr.JumpTo(sym, tpe, purity, loc) => LiftedAst.Expr.JumpTo(sym, tpe, purity, loc)
 
-    case OccurrenceAst.Expr.Stmt(exp1, exp2, tpe, purity, loc) =>
-      val e1 = substituteExp(exp1, env0)
-      val e2 = substituteExp(exp2, env0)
-      LiftedAst.Expr.Stm(e1, e2, tpe, purity, loc)
+      case OccurrenceAst.Expr.Let(sym, exp1, exp2, _, tpe, purity, loc) =>
+        val freshVar = Symbol.freshVarSym(sym)
+        val env1 = env0 + (sym -> freshVar)
+        val e1 = substituteExp(exp1, env1)
+        val e2 = substituteExp(exp2, env1)
+        LiftedAst.Expr.Let(freshVar, e1, e2, tpe, purity, loc)
 
-    case OccurrenceAst.Expr.Scope(sym, exp, tpe, purity, loc) =>
-      val e = substituteExp(exp, env0)
-      LiftedAst.Expr.Scope(sym, e, tpe, purity, loc)
+      case OccurrenceAst.Expr.Stmt(exp1, exp2, tpe, purity, loc) =>
+        val e1 = substituteExp(exp1, env0)
+        val e2 = substituteExp(exp2, env0)
+        LiftedAst.Expr.Stm(e1, e2, tpe, purity, loc)
 
-    case OccurrenceAst.Expr.TryCatch(exp, rules, tpe, purity, loc) =>
-      val e = substituteExp(exp, env0)
-      val rs = rules.map {
-        case OccurrenceAst.CatchRule(sym, clazz, exp) =>
-          val freshVar = Symbol.freshVarSym(sym)
-          val env1 = env0 + (sym -> freshVar)
-          val e = substituteExp(exp, env1)
-          LiftedAst.CatchRule(freshVar, clazz, e)
-      }
-      LiftedAst.Expr.TryCatch(e, rs, tpe, purity, loc)
+      case OccurrenceAst.Expr.Scope(sym, exp, tpe, purity, loc) =>
+        val e = substituteExp(exp, env0)
+        LiftedAst.Expr.Scope(sym, e, tpe, purity, loc)
 
-    case OccurrenceAst.Expr.TryWith(exp, effUse, rules, tpe, purity, loc) =>
-      val e = substituteExp(exp, env0)
-      val rs = rules.map {
-        case OccurrenceAst.HandlerRule(op, fparams, exp) =>
-          val fps = fparams.map(visitFormalParam)
-          val e = substituteExp(exp, env0)
-          LiftedAst.HandlerRule(op, fps, e)
-      }
-      LiftedAst.Expr.TryWith(e, effUse, rs, tpe, purity, loc)
+      case OccurrenceAst.Expr.TryCatch(exp, rules, tpe, purity, loc) =>
+        val e = substituteExp(exp, env0)
+        val rs = rules.map {
+          case OccurrenceAst.CatchRule(sym, clazz, exp) =>
+            val freshVar = Symbol.freshVarSym(sym)
+            val env1 = env0 + (sym -> freshVar)
+            val e = substituteExp(exp, env1)
+            LiftedAst.CatchRule(freshVar, clazz, e)
+        }
+        LiftedAst.Expr.TryCatch(e, rs, tpe, purity, loc)
 
-    case OccurrenceAst.Expr.Do(op, exps, tpe, purity, loc) =>
-      val es = exps.map(substituteExp(_, env0))
-      LiftedAst.Expr.Do(op, es, tpe, purity, loc)
+      case OccurrenceAst.Expr.TryWith(exp, effUse, rules, tpe, purity, loc) =>
+        val e = substituteExp(exp, env0)
+        val rs = rules.map {
+          case OccurrenceAst.HandlerRule(op, fparams, exp) =>
+            val fps = fparams.map(visitFormalParam)
+            val e = substituteExp(exp, env0)
+            LiftedAst.HandlerRule(op, fps, e)
+        }
+        LiftedAst.Expr.TryWith(e, effUse, rs, tpe, purity, loc)
 
-    case OccurrenceAst.Expr.NewObject(name, clazz, tpe, purity, methods0, loc) =>
-      val methods = methods0.map {
-        case OccurrenceAst.JvmMethod(ident, fparams, clo, retTpe, purity, loc) =>
-          val f = fparams.map {
-            case OccurrenceAst.FormalParam(sym, mod, tpe, loc) => LiftedAst.FormalParam(sym, mod, tpe, loc)
-          }
-          val c = substituteExp(clo, env0)
-          LiftedAst.JvmMethod(ident, f, c, retTpe, purity, loc)
-      }
-      LiftedAst.Expr.NewObject(name, clazz, tpe, purity, methods, loc)
+      case OccurrenceAst.Expr.Do(op, exps, tpe, purity, loc) =>
+        val es = exps.map(substituteExp(_, env0))
+        LiftedAst.Expr.Do(op, es, tpe, purity, loc)
 
+      case OccurrenceAst.Expr.NewObject(name, clazz, tpe, purity, methods0, loc) =>
+        val methods = methods0.map {
+          case OccurrenceAst.JvmMethod(ident, fparams, clo, retTpe, purity, loc) =>
+            val f = fparams.map {
+              case OccurrenceAst.FormalParam(sym, mod, tpe, loc) => LiftedAst.FormalParam(sym, mod, tpe, loc)
+            }
+            val c = substituteExp(clo, env0)
+            LiftedAst.JvmMethod(ident, f, c, retTpe, purity, loc)
+        }
+        LiftedAst.Expr.NewObject(name, clazz, tpe, purity, methods, loc)
+
+    }
   }
 
   /**

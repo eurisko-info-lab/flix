@@ -7,24 +7,9 @@ repositories {
 }
 
 dependencies {
-    implementation project(':ast')
-
     implementation 'org.scala-lang:scala3-library_3:3.6.2!!'
 
-    implementation('org.jline:jline:3.28.0')
-    implementation('com.github.rjeschke:txtmark:0.13')
-    implementation('org.json4s:json4s-native_3:4.0.7')
     implementation("com.lihaoyi:sourcecode_3:0.4.2")
-    implementation("org.apache.commons:commons-lang3:3.17.0")
-
-    // Note: The tomlj library determines the antlr library.
-    // We cannot upgrade the antlr library independently.
-    implementation('org.tomlj:tomlj:1.1.1')
-    implementation('org.antlr:antlr4-runtime:4.11.1')
-
-    implementation("io.get-coursier:coursier_2.13:2.1.22") {
-        exclude group: "org.iq80.snappy", module: "snappy"
-    }
 
     testImplementation platform('org.junit:junit-bom:5.10.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'

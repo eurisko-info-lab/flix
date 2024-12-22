@@ -17,15 +17,20 @@ package ca.uwaterloo.flix.api.lsp.provider.completion
 
 import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.api.lsp.provider.completion.Completion.InstanceCompletion
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.shared.{Scope, VarText}
 import ca.uwaterloo.flix.language.ast.{Kind, Symbol, Type, TypeConstructor, TypedAst}
-import ca.uwaterloo.flix.language.fmt.FormatType
+import ca.uwaterloo.flix.language.fmt.{FormatType, FormatOptions}
+
+import org.eclipse.lsp4j.FormattingOptions
 
 object InstanceCompleter {
   /**
     * Returns a List of Completion based on traits.
     */
   def getCompletions(context: CompletionContext)(implicit flix: Flix, root: TypedAst.Root): Iterable[InstanceCompletion] = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     if (context.previousWord != "instance") {
       return Nil
     }
@@ -34,7 +39,9 @@ object InstanceCompleter {
       * Replaces the given symbol with a variable named by the given `newText`.
       */
     def replaceText(oldSym: Symbol, tpe: Type, newText: String)(implicit flix: Flix): Type = {
+      implicit val genSym: GenSym = flix.genSym
       implicit val scope: Scope = Scope.Top
+
       tpe match {
         case Type.Var(sym, loc) if oldSym == sym =>Type.Var(sym.withText(VarText.SourceText(newText)), loc)
         case Type.Var(_, _) => tpe

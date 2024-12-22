@@ -15,7 +15,7 @@
  */
 package ca.uwaterloo.flix.language.fmt
 
-import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.Scheme
 
 object FormatScheme {
@@ -24,7 +24,7 @@ object FormatScheme {
     * Construct a string representation of the type scheme,  e.g.
     * `∀(a, b).a -> Int -> b with Show[a], Eq[b]`
     */
-  def formatScheme(sc: Scheme)(implicit flix: Flix): String = {
+  def formatScheme(sc: Scheme)(implicit formatOptions: FormatOptions): String = {
     val mainPart = formatSchemeWithoutConstraints(sc)
 
     val tconstrPart =
@@ -68,8 +68,8 @@ object FormatScheme {
     * Construct a string representation of the type scheme, excluding type constraints, e.g.,
     * `∀(a, b).a -> Int -> b`
     */
-  def formatSchemeWithoutConstraints(sc: Scheme)(implicit flix: Flix): String = {
-    formatSchemeWithoutConstraintsWithOptions(sc, flix.getFormatOptions)
+  def formatSchemeWithoutConstraints(sc: Scheme)(implicit formatOptions: FormatOptions): String = {
+    formatSchemeWithoutConstraintsWithOptions(sc, formatOptions)
   }
 
   /**

@@ -16,6 +16,7 @@
 package ca.uwaterloo.flix.language.phase.typer
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.shared.Scope
 import ca.uwaterloo.flix.language.ast.{Kind, Name, RigidityEnv, Symbol, Type, TypeConstructor}
 import ca.uwaterloo.flix.language.phase.typer.ConstraintSolver.ResolutionResult
@@ -82,43 +83,47 @@ object SchemaConstraintSolver {
     *
     * Returns None if no such pivot is possible.
     */
-  private def pivot(row: Type, hdLabel: Name.Pred, hdTpe: Type, tvars: Set[Symbol.KindedTypeVarSym], renv: RigidityEnv)(implicit scope: Scope, flix: Flix): Option[(Type, Substitution)] = row match {
+  private def pivot(row: Type, hdLabel: Name.Pred, hdTpe: Type, tvars: Set[Symbol.KindedTypeVarSym], renv: RigidityEnv)(implicit scope: Scope, flix: Flix): Option[(Type, Substitution)] = {
+    implicit val genSym: GenSym = flix.genSym
 
-    // If head labels match, then there is nothing to do. We return the same row.
-    //
-    // -------------------------------------------
-    // { ℓ : τ₁ | ρ } ~~{ℓ : τ₂}~~> { ℓ : τ₁ | ρ }
-    case r@Type.Apply(Type.Apply(Type.Cst(TypeConstructor.SchemaRowExtend(label), _), _, _), _, _) if label == hdLabel =>
-      Some((r, Substitution.empty))
+    row match {
 
-    // If head labels do not match, we need to recurse and bring the selected label to the front.
-    //
-    //       ℓ₁ ≠ ℓ₂    ρ₁ ~~{ℓ₂ : τ₂}~~> { ℓ₂ : τ₃  | ρ₃ }
-    // ---------------------------------------------------------
-    // { ℓ₁ : τ₁ | ρ₁ } ~~{ℓ₂ : τ₂}~~> { ℓ₂ : τ₃, ℓ₁ : τ₁ | ρ₃ }
-    case Type.Apply(Type.Apply(Type.Cst(TypeConstructor.SchemaRowExtend(label), _), tpe, _), rest, loc) =>
-      pivot(rest, hdLabel, hdTpe, tvars, renv).map {
-        case (Type.Apply(newHead, rest, _), subst) =>
-          // The new row from the recursive call has the selected label at the head.
-          // Now we just swap the new row's head with ours, to keep the selected label on top.
-          val newRow = Type.Apply(newHead, Type.Apply(Type.Apply(Type.Cst(TypeConstructor.SchemaRowExtend(label), loc), tpe, loc), rest, loc), loc)
-          (newRow, subst)
+      // If head labels match, then there is nothing to do. We return the same row.
+      //
+      // -------------------------------------------
+      // { ℓ : τ₁ | ρ } ~~{ℓ : τ₂}~~> { ℓ : τ₁ | ρ }
+      case r@Type.Apply(Type.Apply(Type.Cst(TypeConstructor.SchemaRowExtend(label), _), _, _), _, _) if label == hdLabel =>
+        Some((r, Substitution.empty))
 
-        case _ => throw InternalCompilerException("unexpected non-row", loc)
-      }
+      // If head labels do not match, we need to recurse and bring the selected label to the front.
+      //
+      //       ℓ₁ ≠ ℓ₂    ρ₁ ~~{ℓ₂ : τ₂}~~> { ℓ₂ : τ₃  | ρ₃ }
+      // ---------------------------------------------------------
+      // { ℓ₁ : τ₁ | ρ₁ } ~~{ℓ₂ : τ₂}~~> { ℓ₂ : τ₃, ℓ₁ : τ₁ | ρ₃ }
+      case Type.Apply(Type.Apply(Type.Cst(TypeConstructor.SchemaRowExtend(label), _), tpe, _), rest, loc) =>
+        pivot(rest, hdLabel, hdTpe, tvars, renv).map {
+          case (Type.Apply(newHead, rest, _), subst) =>
+            // The new row from the recursive call has the selected label at the head.
+            // Now we just swap the new row's head with ours, to keep the selected label on top.
+            val newRow = Type.Apply(newHead, Type.Apply(Type.Apply(Type.Cst(TypeConstructor.SchemaRowExtend(label), loc), tpe, loc), rest, loc), loc)
+            (newRow, subst)
 
-    // If we have a variable, then we can map it to a fresh row type with the selected label at the head.
-    //
-    //     β fresh, α ∉ fv(ρ)
-    // ----------------------------------------------------
-    //  α ~~{ℓ : τ}~~> { ℓ : τ | β } ; {α ↦ { ℓ : τ | β }}
-    case Type.Var(sym, loc) if !tvars.contains(sym) && renv.isFlexible(sym) =>
-      val tvar = Type.freshVar(Kind.SchemaRow, loc)
-      val newRow = Type.mkSchemaRowExtend(hdLabel, hdTpe, tvar, loc)
-      val subst = Substitution.singleton(sym, newRow)
-      Some((newRow, subst))
+          case _ => throw InternalCompilerException("unexpected non-row", loc)
+        }
 
-    // If no rule matches, then we cannot pivot this row type.
-    case _ => None
+      // If we have a variable, then we can map it to a fresh row type with the selected label at the head.
+      //
+      //     β fresh, α ∉ fv(ρ)
+      // ----------------------------------------------------
+      //  α ~~{ℓ : τ}~~> { ℓ : τ | β } ; {α ↦ { ℓ : τ | β }}
+      case Type.Var(sym, loc) if !tvars.contains(sym) && renv.isFlexible(sym) =>
+        val tvar = Type.freshVar(Kind.SchemaRow, loc)
+        val newRow = Type.mkSchemaRowExtend(hdLabel, hdTpe, tvar, loc)
+        val subst = Substitution.singleton(sym, newRow)
+        Some((newRow, subst))
+
+      // If no rule matches, then we cannot pivot this row type.
+      case _ => None
+    }
   }
 }

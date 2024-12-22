@@ -16,7 +16,7 @@
 
 package ca.uwaterloo.flix.language.ast
 
-import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.Name.{Ident, NName}
 import ca.uwaterloo.flix.language.ast.shared.{BoundBy, Scope, Source, VarText}
 import ca.uwaterloo.flix.util.InternalCompilerException
@@ -27,6 +27,11 @@ import scala.collection.immutable.SortedSet
 sealed trait Symbol
 
 object Symbol {
+  /**
+   * The reserved Flix delimiter.
+   */
+  val Delimiter: String = "$"
+
 
   /**
     * The primitive effects defined in the Prelude.
@@ -85,66 +90,66 @@ object Symbol {
   /**
     * Returns a fresh def symbol based on the given symbol.
     */
-  def freshDefnSym(sym: DefnSym)(implicit flix: Flix): DefnSym = {
-    val id = Some(flix.genSym.freshId())
+  def freshDefnSym(sym: DefnSym)(implicit genSym: GenSym): DefnSym = {
+    val id = Some(genSym.freshId())
     new DefnSym(id, sym.namespace, sym.text, sym.loc)
   }
 
   /**
     * Returns a fresh hole symbol associated with the given source location `loc`.
     */
-  def freshHoleSym(loc: SourceLocation)(implicit flix: Flix): HoleSym = {
-    val id = flix.genSym.freshId()
+  def freshHoleSym(loc: SourceLocation)(implicit genSym: GenSym): HoleSym = {
+    val id = genSym.freshId()
     new HoleSym(Nil, "h" + id, loc)
   }
 
   /**
     * Returns a fresh variable symbol based on the given symbol.
     */
-  def freshVarSym(sym: VarSym)(implicit flix: Flix): VarSym = {
-    new VarSym(flix.genSym.freshId(), sym.text, sym.tvar, sym.boundBy, sym.loc)
+  def freshVarSym(sym: VarSym)(implicit genSym: GenSym): VarSym = {
+    new VarSym(genSym.freshId(), sym.text, sym.tvar, sym.boundBy, sym.loc)
   }
 
   /**
     * Returns a fresh variable symbol for the given identifier.
     */
-  def freshVarSym(ident: Name.Ident, boundBy: BoundBy)(implicit scope: Scope, flix: Flix): VarSym = {
-    new VarSym(flix.genSym.freshId(), ident.name, Type.freshVar(Kind.Star, ident.loc), boundBy, ident.loc)
+  def freshVarSym(ident: Name.Ident, boundBy: BoundBy)(implicit scope: Scope, genSym: GenSym): VarSym = {
+    new VarSym(genSym.freshId(), ident.name, Type.freshVar(Kind.Star, ident.loc), boundBy, ident.loc)
   }
 
   /**
     * Returns a fresh variable symbol with the given text.
     */
-  def freshVarSym(text: String, boundBy: BoundBy, loc: SourceLocation)(implicit scope: Scope, flix: Flix): VarSym = {
-    new VarSym(flix.genSym.freshId(), text, Type.freshVar(Kind.Star, loc), boundBy, loc)
+  def freshVarSym(text: String, boundBy: BoundBy, loc: SourceLocation)(implicit scope: Scope, genSym: GenSym): VarSym = {
+    new VarSym(genSym.freshId(), text, Type.freshVar(Kind.Star, loc), boundBy, loc)
   }
 
   /**
     * Returns a fresh type variable symbol with the given text.
     */
-  def freshKindedTypeVarSym(text: VarText, kind: Kind, isRegion: Boolean, loc: SourceLocation)(implicit scope: Scope, flix: Flix): KindedTypeVarSym = {
-    new KindedTypeVarSym(flix.genSym.freshId(), text, kind, isRegion, scope, loc)
+  def freshKindedTypeVarSym(text: VarText, kind: Kind, isRegion: Boolean, loc: SourceLocation)(implicit scope: Scope, genSym: GenSym): KindedTypeVarSym = {
+    new KindedTypeVarSym(genSym.freshId(), text, kind, isRegion, scope, loc)
   }
 
   /**
     * Returns a fresh type variable symbol with the given text.
     */
-  def freshUnkindedTypeVarSym(text: VarText, isRegion: Boolean, loc: SourceLocation)(implicit scope: Scope, flix: Flix): UnkindedTypeVarSym = {
-    new UnkindedTypeVarSym(flix.genSym.freshId(), text, isRegion, scope, loc)
+  def freshUnkindedTypeVarSym(text: VarText, isRegion: Boolean, loc: SourceLocation)(implicit scope: Scope, genSym: GenSym): UnkindedTypeVarSym = {
+    new UnkindedTypeVarSym(genSym.freshId(), text, isRegion, scope, loc)
   }
 
   /**
     * Returns a label symbol with the given text.
     */
-  def freshLabel(text: String)(implicit flix: Flix): LabelSym = {
-    new LabelSym(flix.genSym.freshId(), text)
+  def freshLabel(text: String)(implicit genSym: GenSym): LabelSym = {
+    new LabelSym(genSym.freshId(), text)
   }
 
   /**
     * Returns a fresh label symbol with the same text as the given label.
     */
-  def freshLabel(sym: LabelSym)(implicit flix: Flix): LabelSym = {
-    new LabelSym(flix.genSym.freshId(), sym.text)
+  def freshLabel(sym: LabelSym)(implicit genSym: GenSym): LabelSym = {
+    new LabelSym(genSym.freshId(), sym.text)
   }
 
   /**
@@ -369,7 +374,7 @@ object Symbol {
     /**
       * Human readable representation.
       */
-    override def toString: String = text + Flix.Delimiter + id
+    override def toString: String = text + Delimiter + id
   }
 
   /**
@@ -406,7 +411,7 @@ object Symbol {
         case VarText.Absent => "tvar"
         case VarText.SourceText(s) => s
       }
-      string + Flix.Delimiter + id
+      string + Delimiter + id
     }
 
     /**
@@ -445,7 +450,7 @@ object Symbol {
         case VarText.Absent => "tvar"
         case VarText.SourceText(s) => s
       }
-      string + Flix.Delimiter + id
+      string + Delimiter + id
     }
   }
 
@@ -459,7 +464,7 @@ object Symbol {
       */
     def name: String = id match {
       case None => text
-      case Some(i) => text + Flix.Delimiter + i
+      case Some(i) => text + Delimiter + i
     }
 
     /**
@@ -736,7 +741,7 @@ object Symbol {
     /**
       * Human readable representation.
       */
-    override def toString: String = text + Flix.Delimiter + id
+    override def toString: String = text + Delimiter + id
   }
 
   /**

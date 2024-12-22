@@ -16,12 +16,13 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.language.CompilationMessage
+import ca.uwaterloo.flix.language.{CompilationMessage, GenSym}
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.ast.shared.SymUse.DefSymUse
 import ca.uwaterloo.flix.language.ast.{Scheme, SourceLocation, Symbol, Type, TypeConstructor, TypedAst}
 import ca.uwaterloo.flix.language.dbg.AstPrinter.*
 import ca.uwaterloo.flix.language.errors.EntryPointError
+import ca.uwaterloo.flix.language.fmt.FormatOptions
 import ca.uwaterloo.flix.language.phase.unification.{TraitEnv, TraitEnvironment}
 import ca.uwaterloo.flix.util.collection.ListMap
 import ca.uwaterloo.flix.util.{CofiniteEffSet, InternalCompilerException, ParOps}
@@ -316,6 +317,8 @@ object EntryPoints extends ValidPhasePlugin[TypedAst.Root, TypedAst.Root] {
       * though it has `ToString` defined.
       */
     private def checkToStringOrUnitResult(defn: TypedAst.Def)(implicit root: TypedAst.Root, flix: Flix): Option[EntryPointError] = {
+      implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
       val resultType = defn.spec.retTpe
       if (isUnitType(resultType)) None
       else {
@@ -335,6 +338,8 @@ object EntryPoints extends ValidPhasePlugin[TypedAst.Root, TypedAst.Root] {
       * N.B.: `defn` must not have type variables or associated types.
       */
     private def checkPrimitiveEffect(defn: TypedAst.Def)(implicit flix: Flix): Option[EntryPointError] = {
+      implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
       val eff = defn.spec.eff
       if (isPrimitiveEffect(eff)) None
       else Some(EntryPointError.IllegalEntryPointEffect(eff, eff.loc))
@@ -516,6 +521,8 @@ object EntryPoints extends ValidPhasePlugin[TypedAst.Root, TypedAst.Root] {
       * }}}
       */
     private def mkEntryPoint(oldEntryPoint: TypedAst.Def, root: TypedAst.Root)(implicit flix: Flix): TypedAst.Def = {
+      implicit val genSym: GenSym = flix.genSym
+
       val argSym = Symbol.freshVarSym("_unit", BoundBy.FormalParam, SourceLocation.Unknown)
 
       // The new type is `Unit -> Unit \ IO + eff` where `eff` is the effect of the old main.

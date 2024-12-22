@@ -4,4 +4,5 @@ include 'core'
 include 'jvm-codegen'
 include 'lsp-server'
 include 'phases'
+include 'ast'
 

@@ -19,7 +19,7 @@ package ca.uwaterloo.flix.language.phase
 import ca.uwaterloo.flix.api.{Flix, Version}
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.ast.{Kind, SourceLocation, Symbol, Type, TypeConstructor, TypedAst}
-import ca.uwaterloo.flix.language.fmt.{FormatType, SimpleType}
+import ca.uwaterloo.flix.language.fmt.{FormatType, SimpleType, FormatOptions}
 import ca.uwaterloo.flix.tools.pkg.PackageModules
 import ca.uwaterloo.flix.util.LocalResource
 import com.github.rjeschke.txtmark
@@ -73,7 +73,7 @@ object HtmlDocumentor {
     */
   val LibraryGitHub: String = "https://github.com/flix/flix/blob/master/main/src/library/"
 
-  def run(root: TypedAst.Root, packageModules: PackageModules)(implicit flix: Flix): Unit = {
+  def run(root: TypedAst.Root, packageModules: PackageModules)(implicit formatOptions: FormatOptions): Unit = {
     val modulesRoot = splitModules(root)
     val filteredModulesRoot = filterModules(modulesRoot, packageModules)
     val pairedModulesRoot = pairModules(filteredModulesRoot)
@@ -88,7 +88,7 @@ object HtmlDocumentor {
     *
     * Returns a list of the names of the generated files.
     */
-  private def visitMod(mod: Module)(implicit flix: Flix): List[String] = {
+  private def visitMod(mod: Module)(implicit formatOptions: FormatOptions): List[String] = {
     val out = documentModule(mod)
     writeDocFile(mod.fileName, out)
 
@@ -106,7 +106,7 @@ object HtmlDocumentor {
     *
     * Returns a list of the names of the generated files.
     */
-  private def visitTrait(trt: Trait)(implicit flix: Flix): List[String] = {
+  private def visitTrait(trt: Trait)(implicit formatOptions: FormatOptions): List[String] = {
     val out = documentTrait(trt)
     writeDocFile(trt.fileName, out)
 
@@ -126,7 +126,7 @@ object HtmlDocumentor {
     *
     * Returns a list of the names of the generated files.
     */
-  private def visitEffect(eff: Effect)(implicit flix: Flix): List[String] = {
+  private def visitEffect(eff: Effect)(implicit formatOptions: FormatOptions): List[String] = {
     val out = documentEffect(eff)
     writeDocFile(eff.fileName, out)
 
@@ -146,7 +146,7 @@ object HtmlDocumentor {
     *
     * Returns a list of the names of the generated files.
     */
-  private def visitEnum(enm: Enum)(implicit flix: Flix): List[String] = {
+  private def visitEnum(enm: Enum)(implicit formatOptions: FormatOptions): List[String] = {
     val out = documentEnum(enm)
     writeDocFile(enm.fileName, out)
 
@@ -531,7 +531,7 @@ object HtmlDocumentor {
   /**
     * Documents the given `Module`, `mod`, returning a string of HTML.
     */
-  private def documentModule(mod: Module)(implicit flix: Flix): String = {
+  private def documentModule(mod: Module)(implicit formatOptions: FormatOptions): String = {
     implicit val sb: StringBuilder = new StringBuilder()
 
     val sortedTraits = mod.traits.sortBy(_.name)
@@ -588,7 +588,7 @@ object HtmlDocumentor {
   /**
     * Documents the given `Trait`, `trt`, returning a string of HTML.
     */
-  private def documentTrait(trt: Trait)(implicit flix: Flix): String = {
+  private def documentTrait(trt: Trait)(implicit formatOptions: FormatOptions): String = {
     implicit val sb: StringBuilder = new StringBuilder()
 
     val sortedAssocs = trt.decl.assocs.sortBy(_.sym.name)
@@ -682,7 +682,7 @@ object HtmlDocumentor {
   /**
     * Documents the given `Effect`, `eff`, returning a string of HTML.
     */
-  private def documentEffect(eff: Effect)(implicit flix: Flix): String = {
+  private def documentEffect(eff: Effect)(implicit formatOptions: FormatOptions): String = {
     implicit val sb: StringBuilder = new StringBuilder()
 
     val sortedOps = eff.decl.ops.sortBy(_.sym.name)
@@ -762,7 +762,7 @@ object HtmlDocumentor {
   /**
     * Documents the given `Enum`, `enm`, returning a string of HTML.
     */
-  private def documentEnum(enm: Enum)(implicit flix: Flix): String = {
+  private def documentEnum(enm: Enum)(implicit formatOptions: FormatOptions): String = {
     implicit val sb: StringBuilder = new StringBuilder()
 
     val sortedInstances = enm.instances.sortBy(_.trt.sym.name)
@@ -865,7 +865,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docHeader()(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docHeader()(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append("<header>")
 
     sb.append("<div class='flix'>")
@@ -902,7 +902,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docSideBar(parent: Option[Symbol.ModuleSym])(docContents: () => Unit)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docSideBar(parent: Option[Symbol.ModuleSym])(docContents: () => Unit)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append("<nav>")
     parent.map { p =>
       sb.append(s"<a class='back' href='${escUrl(moduleFileName(p))}'>")
@@ -926,7 +926,7 @@ object HtmlDocumentor {
     * @param docElt A function taking a single item from `group` and generating the corresponding HTML string.
     *               Note that they will each be wrapped in an `<li>` tag.
     */
-  private def docSideBarSection[T](name: String, group: List[T], docElt: T => Unit)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docSideBarSection[T](name: String, group: List[T], docElt: T => Unit)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     if (group.isEmpty) {
       return
     }
@@ -941,7 +941,7 @@ object HtmlDocumentor {
     sb.append("</ul>")
   }
 
-  private def docSubModules(parentMod: Module)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docSubModules(parentMod: Module)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     val subItems: List[Item] =
       parentMod.submodules ++
         parentMod.traits ++
@@ -976,7 +976,7 @@ object HtmlDocumentor {
     * @param group  The list of items in the section, in the order that they should appear.
     * @param docElt A function taking a single item from `group` and generating the corresponding HTML string.
     */
-  private def docSection[T](name: String, group: List[T], docElt: T => Unit)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docSection[T](name: String, group: List[T], docElt: T => Unit)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     if (group.isEmpty) {
       return
     }
@@ -1000,7 +1000,7 @@ object HtmlDocumentor {
     * @param group  The list of items in the section, in the order that they should appear.
     * @param docElt A function taking a single item from `group` and generating the corresponding HTML string.
     */
-  private def docSubSection[T](name: String, group: List[T], docElt: T => Unit)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docSubSection[T](name: String, group: List[T], docElt: T => Unit)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     if (group.isEmpty) {
       return
     }
@@ -1024,7 +1024,7 @@ object HtmlDocumentor {
     * @param group  The list of items in the section, in the order that they should appear.
     * @param docElt A function taking a single item from `group` and generating the corresponding HTML string.
     */
-  private def docCollapsableSubSection[T](name: String, group: List[T], docElt: T => Unit)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docCollapsableSubSection[T](name: String, group: List[T], docElt: T => Unit)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     if (group.isEmpty) {
       return
     }
@@ -1042,7 +1042,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docTypeAlias(ta: TypedAst.TypeAlias)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docTypeAlias(ta: TypedAst.TypeAlias)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append(s"<div class='box' id='ta-${esc(ta.sym.name)}'>")
     sb.append("<div class='decl'>")
     sb.append("<code>")
@@ -1063,7 +1063,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docDef(defn: TypedAst.Def)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docDef(defn: TypedAst.Def)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append(s"<div class='box' id='def-${esc(defn.sym.name)}'>")
     docSpec(defn.sym.name, defn.spec, defn.loc, Some(s"def-${esc(defn.sym.name)}"))
     sb.append("</div>")
@@ -1074,7 +1074,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docSignature(sig: TypedAst.Sig)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docSignature(sig: TypedAst.Sig)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append(s"<div class='box' id='sig-${esc(sig.sym.name)}'>")
     docSpec(sig.sym.name, sig.spec, sig.loc, Some(s"sig-${esc(sig.sym.name)}"))
     sb.append("</div>")
@@ -1085,7 +1085,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docOp(op: TypedAst.Op)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docOp(op: TypedAst.Op)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append(s"<div class='box' id='op-${esc(op.sym.name)}'>")
     docSpec(op.sym.name, op.spec, op.loc, Some(s"op-${esc(op.sym.name)}"))
     sb.append("</div>")
@@ -1097,7 +1097,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docSpec(name: String, spec: TypedAst.Spec, loc: SourceLocation, linkId: Option[String])(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docSpec(name: String, spec: TypedAst.Spec, loc: SourceLocation, linkId: Option[String])(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     docAnnotations(spec.ann)
     sb.append("<div class='decl'>")
     sb.append(s"<code>")
@@ -1120,7 +1120,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docAssoc(assoc: TypedAst.AssocTypeSig)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docAssoc(assoc: TypedAst.AssocTypeSig)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append("<div>")
     sb.append("<div class='decl'>")
     sb.append("<code>")
@@ -1140,7 +1140,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docInstance(instance: TypedAst.Instance)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docInstance(instance: TypedAst.Instance)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append("<div>")
     docAnnotations(instance.ann)
     sb.append("<div class='decl'>")
@@ -1166,7 +1166,7 @@ object HtmlDocumentor {
     *
     * If `tconsts` is empty, nothing will be generated.
     */
-  private def docTraitConstraints(tconsts: List[TraitConstraint])(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docTraitConstraints(tconsts: List[TraitConstraint])(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     if (tconsts.isEmpty) {
       return
     }
@@ -1184,7 +1184,7 @@ object HtmlDocumentor {
   /**
     * Document the name of the given trait symbol, creating a link to the trait's documentation.
     */
-  private def docTraitName(sym: Symbol.TraitSym)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docTraitName(sym: Symbol.TraitSym)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append(s"<a class='tpe-constraint' href='${escUrl(traitFileName(sym))}' title='trait ${esc(traitName(sym))}'>")
     sb.append(esc(sym.name))
     sb.append("</a>")
@@ -1198,7 +1198,7 @@ object HtmlDocumentor {
     *
     * If `econsts` is empty, nothing will be generated.
     */
-  private def docEqualityConstraints(econsts: List[EqualityConstraint])(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docEqualityConstraints(econsts: List[EqualityConstraint])(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     if (econsts.isEmpty) {
       return
     }
@@ -1224,7 +1224,7 @@ object HtmlDocumentor {
     *
     * If `derives` contains no elements, nothing will be generated.
     */
-  private def docDerivations(derives: Derivations)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docDerivations(derives: Derivations)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     if (derives.traits.isEmpty) {
       return
     }
@@ -1241,7 +1241,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docCases(cases: List[TypedAst.Case])(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docCases(cases: List[TypedAst.Case])(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append("<div class='cases'>")
     for (c <- cases.sortBy(_.loc)) {
       sb.append("<code>")
@@ -1268,7 +1268,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docTypeParams(tparams: List[TypedAst.TypeParam])(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docTypeParams(tparams: List[TypedAst.TypeParam])(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     if (tparams.isEmpty) {
       return
     }
@@ -1289,7 +1289,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docFormalParams(fparams: List[TypedAst.FormalParam])(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docFormalParams(fparams: List[TypedAst.FormalParam])(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append("<span class='fparams'>(")
     fparams match {
       case List(TypedAst.FormalParam(_, _, Type.Cst(TypeConstructor.Unit, _), _, _)) =>
@@ -1310,7 +1310,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docAnnotations(anns: Annotations)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docAnnotations(anns: Annotations)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     if (anns.annotations.isEmpty) {
       return
     }
@@ -1326,7 +1326,7 @@ object HtmlDocumentor {
     * Appends a 'copy link' button the the given `StringBuilder`.
     * This creates a link to the given ID on the current URL.
     */
-  private def docLink(id: String)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docLink(id: String)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append(s"<a href='#${escUrl(id)}' class='copy-link' title='Link To Element'>")
     inlineIcon("link")
     sb.append("</a> ")
@@ -1337,7 +1337,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docSourceLocation(loc: SourceLocation)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docSourceLocation(loc: SourceLocation)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append(s"<a class='source' target='_blank' rel='nofollow' href='${createLink(loc)}'>Source</a>")
   }
 
@@ -1350,7 +1350,7 @@ object HtmlDocumentor {
     *               If `None`, the button will not be included.
     * @param loc    The source location that the 'source' button will refer to.
     */
-  private def docActions(linkId: Option[String], loc: SourceLocation)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docActions(linkId: Option[String], loc: SourceLocation)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append("<span class='actions'>")
     linkId.foreach(docLink)
     docSourceLocation(loc)
@@ -1362,7 +1362,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docDoc(doc: Doc)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docDoc(doc: Doc)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     val text = doc.text
     if (text.isBlank) {
       return
@@ -1388,7 +1388,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docType(tpe: Type)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docType(tpe: Type)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append("<span class='type'>")
     sb.append(esc(FormatType.formatType(tpe)))
     sb.append("</span>")
@@ -1399,7 +1399,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docKind(kind: Kind)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docKind(kind: Kind)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     sb.append("<span class='kind'>")
     sb.append(esc(kind.toString))
     sb.append("</span>")
@@ -1414,7 +1414,7 @@ object HtmlDocumentor {
     *
     * The result will be appended to the given `StringBuilder`, `sb`.
     */
-  private def docEffectType(eff: Type)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docEffectType(eff: Type)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     val simpleEff = SimpleType.fromWellKindedType(eff)
     simpleEff match {
       case SimpleType.Pure => // No op
@@ -1429,7 +1429,7 @@ object HtmlDocumentor {
   /**
     * Runs the given `docElt` on each element of `list`, separated by the string: ", " (comma + space)
     */
-  private def docList[T](list: List[T])(docElt: T => Unit)(implicit flix: Flix, sb: StringBuilder): Unit = {
+  private def docList[T](list: List[T])(docElt: T => Unit)(implicit formatOptions: FormatOptions, sb: StringBuilder): Unit = {
     for ((e, i) <- list.zipWithIndex) {
       docElt(e)
       if (i < list.length - 1) {

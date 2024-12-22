@@ -53,6 +53,8 @@ object HoverProvider {
   }
 
   private def hoverType(tpe: Type, loc: SourceLocation)(implicit root: Root, flix: Flix): JObject = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     val lowerAndUpperBounds = SetFormula.formatLowerAndUpperBounds(tpe)(root)
     val markup =
       s"""```flix
@@ -78,6 +80,8 @@ object HoverProvider {
   }
 
   private def hoverDef(sym: Symbol.DefnSym, loc: SourceLocation)(implicit root: Root, flix: Flix): JObject = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     val defDecl = root.defs(sym)
     val markup =
       s"""```flix
@@ -93,6 +97,8 @@ object HoverProvider {
   }
 
   private def hoverSig(sym: Symbol.SigSym, loc: SourceLocation)(implicit root: Root, flix: Flix): JObject = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     val sigDecl = root.sigs(sym)
     val markup =
       s"""```flix
@@ -108,6 +114,8 @@ object HoverProvider {
   }
 
   private def hoverOp(sym: Symbol.OpSym, loc: SourceLocation)(implicit root: Root, flix: Flix): JObject = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     val opDecl = root.effects(sym.eff).ops.find(_.sym == sym).get // guaranteed to be present
     val markup =
       s"""```flix
@@ -123,6 +131,8 @@ object HoverProvider {
   }
 
   private def formatTypAndEff(tpe0: Type, eff0: Type)(implicit flix: Flix): String = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     // TODO deduplicate with CompletionProvider
     val t = FormatType.formatType(tpe0)
 

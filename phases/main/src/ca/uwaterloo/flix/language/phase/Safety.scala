@@ -11,6 +11,7 @@ import ca.uwaterloo.flix.language.ast.{Kind, RigidityEnv, SourceLocation, Symbol
 import ca.uwaterloo.flix.language.dbg.AstPrinter.*
 import ca.uwaterloo.flix.language.errors.SafetyError
 import ca.uwaterloo.flix.language.errors.SafetyError.*
+import ca.uwaterloo.flix.language.fmt.FormatOptions
 import ca.uwaterloo.flix.util.{JvmUtils, ParOps}
 
 import java.math.BigInteger
@@ -64,157 +65,160 @@ object Safety extends ValidPhasePlugin[Root, Root] {
    * @param inTryCatch indicates whether `exp` is enclosed in a try-catch. This can be reset if the
    *                   expression will later be extracted to its own function (e.g [[Expr.Lambda]]).
    */
-  private def visitExp(exp0: Expr)(implicit inTryCatch: Boolean, renv: RigidityEnv, flix: Flix): List[SafetyError] = exp0 match {
-    case Expr.Cst(_, _, _) =>
-      Nil
+  private def visitExp(exp0: Expr)(implicit inTryCatch: Boolean, renv: RigidityEnv, flix: Flix): List[SafetyError] = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
 
-    case Expr.Var(_, _, _) =>
-      Nil
+    exp0 match {
+      case Expr.Cst(_, _, _) =>
+        Nil
 
-    case Expr.Hole(_, _, _, _) =>
-      Nil
+      case Expr.Var(_, _, _) =>
+        Nil
 
-    case Expr.HoleWithExp(exp, _, _, _) =>
-      visitExp(exp)
+      case Expr.Hole(_, _, _, _) =>
+        Nil
 
-    case Expr.OpenAs(_, exp, _, _) =>
-      visitExp(exp)
+      case Expr.HoleWithExp(exp, _, _, _) =>
+        visitExp(exp)
 
-    case Expr.Use(_, _, exp, _) =>
-      visitExp(exp)
+      case Expr.OpenAs(_, exp, _, _) =>
+        visitExp(exp)
 
-    case Expr.Lambda(_, exp, _, _) =>
-      // `exp` will be in its own function, so `inTryCatch` is reset.
-      visitExp(exp)(inTryCatch = false, renv, flix)
+      case Expr.Use(_, _, exp, _) =>
+        visitExp(exp)
 
-    case Expr.ApplyClo(exp1, exp2, _, _, _) =>
-      visitExp(exp1) ++ visitExp(exp2)
+      case Expr.Lambda(_, exp, _, _) =>
+        // `exp` will be in its own function, so `inTryCatch` is reset.
+        visitExp(exp)(inTryCatch = false, renv, flix)
 
-    case Expr.ApplyDef(_, exps, _, _, _, _) =>
-      exps.flatMap(visitExp)
+      case Expr.ApplyClo(exp1, exp2, _, _, _) =>
+        visitExp(exp1) ++ visitExp(exp2)
 
-    case Expr.ApplyLocalDef(_, exps, _, _, _, _) =>
-      exps.flatMap(visitExp)
+      case Expr.ApplyDef(_, exps, _, _, _, _) =>
+        exps.flatMap(visitExp)
 
-    case Expr.ApplySig(_, exps, _, _, _, _) =>
-      exps.flatMap(visitExp)
+      case Expr.ApplyLocalDef(_, exps, _, _, _, _) =>
+        exps.flatMap(visitExp)
 
-    case Expr.Unary(_, exp, _, _, _) =>
-      visitExp(exp)
+      case Expr.ApplySig(_, exps, _, _, _, _) =>
+        exps.flatMap(visitExp)
 
-    case Expr.Binary(_, exp1, exp2, _, _, _) =>
-      visitExp(exp1) ++ visitExp(exp2)
+      case Expr.Unary(_, exp, _, _, _) =>
+        visitExp(exp)
 
-    case Expr.Let(_, exp1, exp2, _, _, _) =>
-      visitExp(exp1) ++ visitExp(exp2)
+      case Expr.Binary(_, exp1, exp2, _, _, _) =>
+        visitExp(exp1) ++ visitExp(exp2)
 
-    case Expr.LocalDef(_, _, exp1, exp2, _, _, _) =>
-      // `exp1` will be its own function, so `inTryCatch` is reset.
-      visitExp(exp1)(inTryCatch = false, renv, flix) ++ visitExp(exp2)
+      case Expr.Let(_, exp1, exp2, _, _, _) =>
+        visitExp(exp1) ++ visitExp(exp2)
 
-    case Expr.Region(_, _) =>
-      Nil
+      case Expr.LocalDef(_, _, exp1, exp2, _, _, _) =>
+        // `exp1` will be its own function, so `inTryCatch` is reset.
+        visitExp(exp1)(inTryCatch = false, renv, flix) ++ visitExp(exp2)
 
-    case Expr.Scope(_, _, exp, _, _, _) =>
-      visitExp(exp)
+      case Expr.Region(_, _) =>
+        Nil
 
-    case Expr.IfThenElse(exp1, exp2, exp3, _, _, _) =>
-      visitExp(exp1) ++ visitExp(exp2) ++ visitExp(exp3)
+      case Expr.Scope(_, _, exp, _, _, _) =>
+        visitExp(exp)
 
-    case Expr.Stm(exp1, exp2, _, _, _) =>
-      visitExp(exp1) ++ visitExp(exp2)
+      case Expr.IfThenElse(exp1, exp2, exp3, _, _, _) =>
+        visitExp(exp1) ++ visitExp(exp2) ++ visitExp(exp3)
 
-    case Expr.Discard(exp, _, _) =>
-      visitExp(exp)
+      case Expr.Stm(exp1, exp2, _, _, _) =>
+        visitExp(exp1) ++ visitExp(exp2)
 
-    case Expr.Match(exp, rules, _, _, _) =>
-      visitExp(exp) ++ rules.flatMap(rule => rule.guard.map(visitExp).getOrElse(Nil) ++ visitExp(rule.exp))
+      case Expr.Discard(exp, _, _) =>
+        visitExp(exp)
 
-    case Expr.TypeMatch(exp, rules, _, _, _) =>
-      // check whether the last case in the type match looks like `..: _`
-      val missingDefault = rules.lastOption match {
-        // Use top scope since the rigidity check only cares if it's a syntactically known variable
-        case Some(TypeMatchRule(_, Type.Var(sym, _), _)) if renv.isFlexible(sym)(Scope.Top) =>
-          Nil
-        case Some(_) | None =>
-          List(SafetyError.MissingDefaultTypeMatchCase(exp.loc))
-      }
-      visitExp(exp) ++ missingDefault ++ rules.flatMap(rule => visitExp(rule.exp))
+      case Expr.Match(exp, rules, _, _, _) =>
+        visitExp(exp) ++ rules.flatMap(rule => rule.guard.map(visitExp).getOrElse(Nil) ++ visitExp(rule.exp))
 
-    case Expr.RestrictableChoose(_, exp, rules, _, _, _) =>
-      visitExp(exp) ++ rules.flatMap(rule => visitExp(rule.exp))
+      case Expr.TypeMatch(exp, rules, _, _, _) =>
+        // check whether the last case in the type match looks like `..: _`
+        val missingDefault = rules.lastOption match {
+          // Use top scope since the rigidity check only cares if it's a syntactically known variable
+          case Some(TypeMatchRule(_, Type.Var(sym, _), _)) if renv.isFlexible(sym)(Scope.Top) =>
+            Nil
+          case Some(_) | None =>
+            List(SafetyError.MissingDefaultTypeMatchCase(exp.loc))
+        }
+        visitExp(exp) ++ missingDefault ++ rules.flatMap(rule => visitExp(rule.exp))
 
-    case Expr.Tag(_, exps, _, _, _) =>
-      exps.flatMap(visitExp)
+      case Expr.RestrictableChoose(_, exp, rules, _, _, _) =>
+        visitExp(exp) ++ rules.flatMap(rule => visitExp(rule.exp))
 
-    case Expr.RestrictableTag(_, exps, _, _, _) =>
-      exps.flatMap(visitExp)
+      case Expr.Tag(_, exps, _, _, _) =>
+        exps.flatMap(visitExp)
 
-    case Expr.Tuple(elms, _, _, _) =>
-      elms.flatMap(visitExp)
+      case Expr.RestrictableTag(_, exps, _, _, _) =>
+        exps.flatMap(visitExp)
 
-    case Expr.RecordEmpty(_, _) =>
-      Nil
+      case Expr.Tuple(elms, _, _, _) =>
+        elms.flatMap(visitExp)
 
-    case Expr.RecordSelect(exp, _, _, _, _) =>
-      visitExp(exp)
+      case Expr.RecordEmpty(_, _) =>
+        Nil
 
-    case Expr.RecordExtend(_, value, rest, _, _, _) =>
-      visitExp(value) ++ visitExp(rest)
+      case Expr.RecordSelect(exp, _, _, _, _) =>
+        visitExp(exp)
 
-    case Expr.RecordRestrict(_, rest, _, _, _) =>
-      visitExp(rest)
+      case Expr.RecordExtend(_, value, rest, _, _, _) =>
+        visitExp(value) ++ visitExp(rest)
 
-    case Expr.ArrayLit(elms, exp, _, _, _) =>
-      elms.flatMap(visitExp) ++ visitExp(exp)
+      case Expr.RecordRestrict(_, rest, _, _, _) =>
+        visitExp(rest)
 
-    case Expr.ArrayNew(exp1, exp2, exp3, _, _, _) =>
-      visitExp(exp1) ++ visitExp(exp2) ++ visitExp(exp3)
+      case Expr.ArrayLit(elms, exp, _, _, _) =>
+        elms.flatMap(visitExp) ++ visitExp(exp)
 
-    case Expr.ArrayLoad(base, index, _, _, _) =>
-      visitExp(base) ++ visitExp(index)
+      case Expr.ArrayNew(exp1, exp2, exp3, _, _, _) =>
+        visitExp(exp1) ++ visitExp(exp2) ++ visitExp(exp3)
 
-    case Expr.ArrayLength(base, _, _) =>
-      visitExp(base)
+      case Expr.ArrayLoad(base, index, _, _, _) =>
+        visitExp(base) ++ visitExp(index)
 
-    case Expr.ArrayStore(base, index, elm, _, _) =>
-      visitExp(base) ++ visitExp(index) ++ visitExp(elm)
+      case Expr.ArrayLength(base, _, _) =>
+        visitExp(base)
 
-    case Expr.StructNew(_, fields, region, _, _, _) =>
-      fields.flatMap { case (_, exp) => visitExp(exp) } ++ visitExp(region)
+      case Expr.ArrayStore(base, index, elm, _, _) =>
+        visitExp(base) ++ visitExp(index) ++ visitExp(elm)
 
-    case Expr.StructGet(e, _, _, _, _) =>
-      visitExp(e)
+      case Expr.StructNew(_, fields, region, _, _, _) =>
+        fields.flatMap { case (_, exp) => visitExp(exp) } ++ visitExp(region)
 
-    case Expr.StructPut(e1, _, e2, _, _, _) =>
-      visitExp(e1) ++ visitExp(e2)
+      case Expr.StructGet(e, _, _, _, _) =>
+        visitExp(e)
 
-    case Expr.VectorLit(elms, _, _, _) =>
-      elms.flatMap(visitExp)
+      case Expr.StructPut(e1, _, e2, _, _, _) =>
+        visitExp(e1) ++ visitExp(e2)
 
-    case Expr.VectorLoad(exp1, exp2, _, _, _) =>
-      visitExp(exp1) ++ visitExp(exp2)
+      case Expr.VectorLit(elms, _, _, _) =>
+        elms.flatMap(visitExp)
 
-    case Expr.VectorLength(exp, _) =>
-      visitExp(exp)
+      case Expr.VectorLoad(exp1, exp2, _, _, _) =>
+        visitExp(exp1) ++ visitExp(exp2)
 
-    case Expr.Ascribe(exp, _, _, _) =>
-      visitExp(exp)
+      case Expr.VectorLength(exp, _) =>
+        visitExp(exp)
 
-    case Expr.InstanceOf(exp, _, _) =>
-      visitExp(exp)
+      case Expr.Ascribe(exp, _, _, _) =>
+        visitExp(exp)
 
-    case cast@Expr.CheckedCast(castType, exp, _, _, _) =>
-      val castErrors = castType match {
-        case CheckedCastType.TypeCast => checkCheckedTypeCast(cast)
-        case CheckedCastType.EffectCast => Nil
-      }
-      visitExp(exp) ++ castErrors
+      case Expr.InstanceOf(exp, _, _) =>
+        visitExp(exp)
 
-    case cast@Expr.UncheckedCast(exp, _, _, _, _, loc) =>
-      val castErrors = verifyUncheckedCast(cast)
-      val permissionErrors = checkAllPermissions(loc.security, loc)
-      permissionErrors ++ visitExp(exp) ++ castErrors
+      case cast@Expr.CheckedCast(castType, exp, _, _, _) =>
+        val castErrors = castType match {
+          case CheckedCastType.TypeCast => checkCheckedTypeCast(cast)
+          case CheckedCastType.EffectCast => Nil
+        }
+        visitExp(exp) ++ castErrors
+
+      case cast@Expr.UncheckedCast(exp, _, _, _, _, loc) =>
+        val castErrors = verifyUncheckedCast(cast)
+        val permissionErrors = checkAllPermissions(loc.security, loc)
+        permissionErrors ++ visitExp(exp) ++ castErrors
 
     case unsafe@Expr.Unsafe(exp, _, _, _, loc) =>
       val permissionErrors = checkAllPermissions(loc.security, loc)
@@ -223,113 +227,114 @@ object Safety extends ValidPhasePlugin[Root, Root] {
     case Expr.Without(exp, _, _, _, _) =>
       visitExp(exp)
 
-    case Expr.TryCatch(exp, rules, _, _, loc) =>
-      val nestedTryCatchError = if (inTryCatch) List(IllegalNestedTryCatch(loc)) else Nil
-      nestedTryCatchError ++ visitExp(exp)(inTryCatch = true, renv, flix) ++
-        rules.flatMap { case CatchRule(bnd, clazz, e) => checkCatchClass(clazz, bnd.sym.loc) ++ visitExp(e) }
+      case Expr.TryCatch(exp, rules, _, _, loc) =>
+        val nestedTryCatchError = if (inTryCatch) List(IllegalNestedTryCatch(loc)) else Nil
+        nestedTryCatchError ++ visitExp(exp)(inTryCatch = true, renv, flix) ++
+          rules.flatMap { case CatchRule(bnd, clazz, e) => checkCatchClass(clazz, bnd.sym.loc) ++ visitExp(e) }
 
-    case Expr.Throw(exp, _, _, loc) =>
-      val permissionErrors = checkAllPermissions(loc.security, loc)
-      permissionErrors ++ visitExp(exp) ++ checkThrow(exp)
+      case Expr.Throw(exp, _, _, loc) =>
+        val permissionErrors = checkAllPermissions(loc.security, loc)
+        permissionErrors ++ visitExp(exp) ++ checkThrow(exp)
 
-    case Expr.TryWith(exp, effUse, rules, _, _, _) =>
-      val effectErrors = {
-        if (Symbol.isPrimitiveEff(effUse.sym)) List(PrimitiveEffectInTryWith(effUse.sym, effUse.loc))
-        else Nil
-      }
-      effectErrors ++ visitExp(exp) ++ rules.flatMap(rule => visitExp(rule.exp))
+      case Expr.TryWith(exp, effUse, rules, _, _, _) =>
+        val effectErrors = {
+          if (Symbol.isPrimitiveEff(effUse.sym)) List(PrimitiveEffectInTryWith(effUse.sym, effUse.loc))
+          else Nil
+        }
+        effectErrors ++ visitExp(exp) ++ rules.flatMap(rule => visitExp(rule.exp))
 
 
-    case Expr.Do(_, exps, _, _, _) =>
-      exps.flatMap(visitExp)
+      case Expr.Do(_, exps, _, _, _) =>
+        exps.flatMap(visitExp)
 
-    case Expr.InvokeConstructor(_, args, _, _, loc) =>
-      val permissionErrors = checkAllPermissions(loc.security, loc)
-      permissionErrors ++ args.flatMap(visitExp)
+      case Expr.InvokeConstructor(_, args, _, _, loc) =>
+        val permissionErrors = checkAllPermissions(loc.security, loc)
+        permissionErrors ++ args.flatMap(visitExp)
 
-    case Expr.InvokeMethod(_, exp, args, _, _, loc) =>
-      val permissionErrors = checkAllPermissions(loc.security, loc)
-      permissionErrors ++ visitExp(exp) ++ args.flatMap(visitExp)
+      case Expr.InvokeMethod(_, exp, args, _, _, loc) =>
+        val permissionErrors = checkAllPermissions(loc.security, loc)
+        permissionErrors ++ visitExp(exp) ++ args.flatMap(visitExp)
 
-    case Expr.InvokeStaticMethod(_, args, _, _, loc) =>
-      val permissionErrors = checkAllPermissions(loc.security, loc)
-      permissionErrors ++ args.flatMap(visitExp)
+      case Expr.InvokeStaticMethod(_, args, _, _, loc) =>
+        val permissionErrors = checkAllPermissions(loc.security, loc)
+        permissionErrors ++ args.flatMap(visitExp)
 
-    case Expr.GetField(_, exp, _, _, loc) =>
-      val permissionErrors = checkAllPermissions(loc.security, loc)
-      permissionErrors ++ visitExp(exp)
+      case Expr.GetField(_, exp, _, _, loc) =>
+        val permissionErrors = checkAllPermissions(loc.security, loc)
+        permissionErrors ++ visitExp(exp)
 
-    case Expr.PutField(_, exp1, exp2, _, _, loc) =>
-      val permissionErrors = checkAllPermissions(loc.security, loc)
-      permissionErrors ++ visitExp(exp1) ++ visitExp(exp2)
+      case Expr.PutField(_, exp1, exp2, _, _, loc) =>
+        val permissionErrors = checkAllPermissions(loc.security, loc)
+        permissionErrors ++ visitExp(exp1) ++ visitExp(exp2)
 
-    case Expr.GetStaticField(_, _, _, loc) =>
-      checkAllPermissions(loc.security, loc)
+      case Expr.GetStaticField(_, _, _, loc) =>
+        checkAllPermissions(loc.security, loc)
 
-    case Expr.PutStaticField(_, exp, _, _, loc) =>
-      val permissionErrors = checkAllPermissions(loc.security, loc)
-      permissionErrors ++ visitExp(exp)
+      case Expr.PutStaticField(_, exp, _, _, loc) =>
+        val permissionErrors = checkAllPermissions(loc.security, loc)
+        permissionErrors ++ visitExp(exp)
 
-    case newObject@Expr.NewObject(_, _, _, _, methods, loc) =>
-      val permissionErrors = checkAllPermissions(loc.security, loc)
-      val objectErrors = checkObjectImplementation(newObject)
-      permissionErrors ++ objectErrors ++ methods.flatMap(method => visitExp(method.exp))
+      case newObject@Expr.NewObject(_, _, _, _, methods, loc) =>
+        val permissionErrors = checkAllPermissions(loc.security, loc)
+        val objectErrors = checkObjectImplementation(newObject)
+        permissionErrors ++ objectErrors ++ methods.flatMap(method => visitExp(method.exp))
 
-    case Expr.NewChannel(exp, _, _, _) =>
-      visitExp(exp)
+      case Expr.NewChannel(exp, _, _, _) =>
+        visitExp(exp)
 
-    case Expr.GetChannel(exp, _, _, _) =>
-      visitExp(exp)
+      case Expr.GetChannel(exp, _, _, _) =>
+        visitExp(exp)
 
-    case Expr.PutChannel(exp1, exp2, _, _, _) =>
-      visitExp(exp1) ++ visitExp(exp2)
+      case Expr.PutChannel(exp1, exp2, _, _, _) =>
+        visitExp(exp1) ++ visitExp(exp2)
 
-    case Expr.SelectChannel(rules, default, _, _, _) =>
-      rules.flatMap {
-        case SelectChannelRule(_, chan, body) => visitExp(chan) ++ visitExp(body)
-      } ++ default.map(visitExp).getOrElse(Nil)
+      case Expr.SelectChannel(rules, default, _, _, _) =>
+        rules.flatMap {
+          case SelectChannelRule(_, chan, body) => visitExp(chan) ++ visitExp(body)
+        } ++ default.map(visitExp).getOrElse(Nil)
 
-    case Expr.Spawn(exp1, exp2, _, _, _) =>
-      val illegalSpawnEffect = {
-        if (hasControlEffects(exp1.eff)) List(IllegalSpawnEffect(exp1.eff, exp1.loc))
-        else Nil
-      }
+      case Expr.Spawn(exp1, exp2, _, _, _) =>
+        val illegalSpawnEffect = {
+          if (hasControlEffects(exp1.eff)) List(IllegalSpawnEffect(exp1.eff, exp1.loc))
+          else Nil
+        }
 
-      illegalSpawnEffect ++ visitExp(exp1) ++ visitExp(exp2)
+        illegalSpawnEffect ++ visitExp(exp1) ++ visitExp(exp2)
 
-    case Expr.ParYield(frags, exp, _, _, _) =>
-      frags.flatMap(fragment => visitExp(fragment.exp)) ++ visitExp(exp)
+      case Expr.ParYield(frags, exp, _, _, _) =>
+        frags.flatMap(fragment => visitExp(fragment.exp)) ++ visitExp(exp)
 
-    case Expr.Lazy(exp, _, _) =>
-      visitExp(exp)
+      case Expr.Lazy(exp, _, _) =>
+        visitExp(exp)
 
-    case Expr.Force(exp, _, _, _) =>
-      visitExp(exp)
+      case Expr.Force(exp, _, _, _) =>
+        visitExp(exp)
 
-    case Expr.FixpointConstraintSet(cs, _, _) =>
-      cs.flatMap(checkConstraint)
+      case Expr.FixpointConstraintSet(cs, _, _) =>
+        cs.flatMap(checkConstraint)
 
-    case Expr.FixpointLambda(_, exp, _, _, _) =>
-      visitExp(exp)
+      case Expr.FixpointLambda(_, exp, _, _, _) =>
+        visitExp(exp)
 
-    case Expr.FixpointMerge(exp1, exp2, _, _, _) =>
-      visitExp(exp1) ++ visitExp(exp2)
+      case Expr.FixpointMerge(exp1, exp2, _, _, _) =>
+        visitExp(exp1) ++ visitExp(exp2)
 
-    case Expr.FixpointSolve(exp, _, _, _) =>
-      visitExp(exp)
+      case Expr.FixpointSolve(exp, _, _, _) =>
+        visitExp(exp)
 
-    case Expr.FixpointFilter(_, exp, _, _, _) =>
-      visitExp(exp)
+      case Expr.FixpointFilter(_, exp, _, _, _) =>
+        visitExp(exp)
 
-    case Expr.FixpointInject(exp, _, _, _, _) =>
-      visitExp(exp)
+      case Expr.FixpointInject(exp, _, _, _, _) =>
+        visitExp(exp)
 
-    case Expr.FixpointProject(_, exp, _, _, _) =>
-      visitExp(exp)
+      case Expr.FixpointProject(_, exp, _, _, _) =>
+        visitExp(exp)
 
-    case Expr.Error(_, _, _) =>
-      Nil
+      case Expr.Error(_, _, _) =>
+        Nil
 
+    }
   }
 
   /** Checks that `ctx` is [[SecurityContext.AllPermissions]]. */
@@ -341,63 +346,67 @@ object Safety extends ValidPhasePlugin[Root, Root] {
   }
 
   /** Checks if `cast` is legal. */
-  private def checkCheckedTypeCast(cast: Expr.CheckedCast)(implicit flix: Flix): List[SafetyError] = cast match {
-    case Expr.CheckedCast(_, exp, tpe, _, loc) =>
-      val from = exp.tpe
-      val to = tpe
-      (Type.eraseAliases(from).baseType, Type.eraseAliases(to).baseType) match {
+  private def checkCheckedTypeCast(cast: Expr.CheckedCast)(implicit flix: Flix): List[SafetyError] = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
 
-        // Allow casting Null to a Java type.
-        case (Type.Cst(TypeConstructor.Null, _), Type.Cst(TypeConstructor.Native(_), _)) => Nil
-        case (Type.Cst(TypeConstructor.Null, _), Type.Cst(TypeConstructor.BigInt, _)) => Nil
-        case (Type.Cst(TypeConstructor.Null, _), Type.Cst(TypeConstructor.BigDecimal, _)) => Nil
-        case (Type.Cst(TypeConstructor.Null, _), Type.Cst(TypeConstructor.Str, _)) => Nil
-        case (Type.Cst(TypeConstructor.Null, _), Type.Cst(TypeConstructor.Regex, _)) => Nil
-        case (Type.Cst(TypeConstructor.Null, _), Type.Cst(TypeConstructor.Array, _)) => Nil
+    cast match {
+      case Expr.CheckedCast(_, exp, tpe, _, loc) =>
+        val from = exp.tpe
+        val to = tpe
+        (Type.eraseAliases(from).baseType, Type.eraseAliases(to).baseType) match {
 
-        // Allow casting one Java type to another if there is a sub-type relationship.
-        case (Type.Cst(TypeConstructor.Native(left), _), Type.Cst(TypeConstructor.Native(right), _)) =>
-          if (right.isAssignableFrom(left)) Nil else IllegalCheckedCast(from, to, loc) :: Nil
+          // Allow casting Null to a Java type.
+          case (Type.Cst(TypeConstructor.Null, _), Type.Cst(TypeConstructor.Native(_), _)) => Nil
+          case (Type.Cst(TypeConstructor.Null, _), Type.Cst(TypeConstructor.BigInt, _)) => Nil
+          case (Type.Cst(TypeConstructor.Null, _), Type.Cst(TypeConstructor.BigDecimal, _)) => Nil
+          case (Type.Cst(TypeConstructor.Null, _), Type.Cst(TypeConstructor.Str, _)) => Nil
+          case (Type.Cst(TypeConstructor.Null, _), Type.Cst(TypeConstructor.Regex, _)) => Nil
+          case (Type.Cst(TypeConstructor.Null, _), Type.Cst(TypeConstructor.Array, _)) => Nil
 
-        // Similar, but for String.
-        case (Type.Cst(TypeConstructor.Str, _), Type.Cst(TypeConstructor.Native(right), _)) =>
-          if (right.isAssignableFrom(classOf[String])) Nil else IllegalCheckedCast(from, to, loc) :: Nil
+          // Allow casting one Java type to another if there is a sub-type relationship.
+          case (Type.Cst(TypeConstructor.Native(left), _), Type.Cst(TypeConstructor.Native(right), _)) =>
+            if (right.isAssignableFrom(left)) Nil else IllegalCheckedCast(from, to, loc) :: Nil
 
-        // Similar, but for Regex.
-        case (Type.Cst(TypeConstructor.Regex, _), Type.Cst(TypeConstructor.Native(right), _)) =>
-          if (right.isAssignableFrom(classOf[java.util.regex.Pattern])) Nil else IllegalCheckedCast(from, to, loc) :: Nil
+          // Similar, but for String.
+          case (Type.Cst(TypeConstructor.Str, _), Type.Cst(TypeConstructor.Native(right), _)) =>
+            if (right.isAssignableFrom(classOf[String])) Nil else IllegalCheckedCast(from, to, loc) :: Nil
 
-        // Similar, but for BigInt.
-        case (Type.Cst(TypeConstructor.BigInt, _), Type.Cst(TypeConstructor.Native(right), _)) =>
-          if (right.isAssignableFrom(classOf[BigInteger])) Nil else IllegalCheckedCast(from, to, loc) :: Nil
+          // Similar, but for Regex.
+          case (Type.Cst(TypeConstructor.Regex, _), Type.Cst(TypeConstructor.Native(right), _)) =>
+            if (right.isAssignableFrom(classOf[java.util.regex.Pattern])) Nil else IllegalCheckedCast(from, to, loc) :: Nil
 
-        // Similar, but for BigDecimal.
-        case (Type.Cst(TypeConstructor.BigDecimal, _), Type.Cst(TypeConstructor.Native(right), _)) =>
-          if (right.isAssignableFrom(classOf[java.math.BigDecimal])) Nil else IllegalCheckedCast(from, to, loc) :: Nil
+          // Similar, but for BigInt.
+          case (Type.Cst(TypeConstructor.BigInt, _), Type.Cst(TypeConstructor.Native(right), _)) =>
+            if (right.isAssignableFrom(classOf[BigInteger])) Nil else IllegalCheckedCast(from, to, loc) :: Nil
 
-        // Similar, but for Arrays.
-        case (Type.Cst(TypeConstructor.Array, _), Type.Cst(TypeConstructor.Native(right), _)) =>
-          if (right.isAssignableFrom(classOf[Array[Object]])) Nil else IllegalCheckedCast(from, to, loc) :: Nil
+          // Similar, but for BigDecimal.
+          case (Type.Cst(TypeConstructor.BigDecimal, _), Type.Cst(TypeConstructor.Native(right), _)) =>
+            if (right.isAssignableFrom(classOf[java.math.BigDecimal])) Nil else IllegalCheckedCast(from, to, loc) :: Nil
 
-        // Disallow casting a type variable.
-        case (src@Type.Var(_, _), _) =>
-          IllegalCheckedCastFromVar(src, to, loc) :: Nil
+          // Similar, but for Arrays.
+          case (Type.Cst(TypeConstructor.Array, _), Type.Cst(TypeConstructor.Native(right), _)) =>
+            if (right.isAssignableFrom(classOf[Array[Object]])) Nil else IllegalCheckedCast(from, to, loc) :: Nil
 
-        // Disallow casting a type variable (symmetric case)
-        case (_, dst@Type.Var(_, _)) =>
-          IllegalCheckedCastToVar(from, dst, loc) :: Nil
+          // Disallow casting a type variable.
+          case (src@Type.Var(_, _), _) =>
+            IllegalCheckedCastFromVar(src, to, loc) :: Nil
 
-        // Disallow casting a Java type to any other type.
-        case (Type.Cst(TypeConstructor.Native(clazz), _), _) =>
-          IllegalCheckedCastToNonJava(clazz, to, loc) :: Nil
+          // Disallow casting a type variable (symmetric case)
+          case (_, dst@Type.Var(_, _)) =>
+            IllegalCheckedCastToVar(from, dst, loc) :: Nil
 
-        // Disallow casting a Java type to any other type (symmetric case).
-        case (_, Type.Cst(TypeConstructor.Native(clazz), _)) =>
-          IllegalCheckedCastFromNonJava(from, clazz, loc) :: Nil
+          // Disallow casting a Java type to any other type.
+          case (Type.Cst(TypeConstructor.Native(clazz), _), _) =>
+            IllegalCheckedCastToNonJava(clazz, to, loc) :: Nil
 
-        // Disallow all other casts.
-        case _ => IllegalCheckedCast(from, to, loc) :: Nil
-      }
+          // Disallow casting a Java type to any other type (symmetric case).
+          case (_, Type.Cst(TypeConstructor.Native(clazz), _)) =>
+            IllegalCheckedCastFromNonJava(from, clazz, loc) :: Nil
+
+          // Disallow all other casts.
+          case _ => IllegalCheckedCast(from, to, loc) :: Nil
+        }
+    }
   }
 
   /**
@@ -406,44 +415,48 @@ object Safety extends ValidPhasePlugin[Root, Root] {
    *   - No primitive type can be cast to a reference type and vice-versa.
    *   - No Bool type can be cast to a non-Bool type and vice-versa.
    */
-  private def verifyUncheckedCast(cast: Expr.UncheckedCast)(implicit flix: Flix): List[SafetyError.ImpossibleUncheckedCast] = cast match {
-    case Expr.UncheckedCast(exp, declaredType, _, _, _, loc) =>
-      val from = exp.tpe
-      val to = declaredType
-      val primitives = List(
-        Type.Unit, Type.Bool, Type.Char,
-        Type.Float32, Type.Float64, Type.Int8,
-        Type.Int16, Type.Int32, Type.Int64,
-        Type.Str, Type.Regex, Type.BigInt, Type.BigDecimal
-      )
+  private def verifyUncheckedCast(cast: Expr.UncheckedCast)(implicit flix: Flix): List[SafetyError.ImpossibleUncheckedCast] = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
 
-      (Type.eraseAliases(from).baseType, to.map(Type.eraseAliases).map(_.baseType)) match {
-        // Allow casts where one side is a type variable.
-        case (Type.Var(_, _), _) => Nil
-        case (_, Some(Type.Var(_, _))) => Nil
+    cast match {
+      case Expr.UncheckedCast(exp, declaredType, _, _, _, loc) =>
+        val from = exp.tpe
+        val to = declaredType
+        val primitives = List(
+          Type.Unit, Type.Bool, Type.Char,
+          Type.Float32, Type.Float64, Type.Int8,
+          Type.Int16, Type.Int32, Type.Int64,
+          Type.Str, Type.Regex, Type.BigInt, Type.BigDecimal
+        )
 
-        // Allow casts between Java types.
-        case (Type.Cst(TypeConstructor.Native(_), _), _) => Nil
-        case (_, Some(Type.Cst(TypeConstructor.Native(_), _))) => Nil
+        (Type.eraseAliases(from).baseType, to.map(Type.eraseAliases).map(_.baseType)) match {
+          // Allow casts where one side is a type variable.
+          case (Type.Var(_, _), _) => Nil
+          case (_, Some(Type.Var(_, _))) => Nil
 
-        // Disallow casting a Boolean to another primitive type.
-        case (Type.Bool, Some(t2)) if primitives.filter(_ != Type.Bool).contains(t2) =>
-          ImpossibleUncheckedCast(from, to.get, loc) :: Nil
+          // Allow casts between Java types.
+          case (Type.Cst(TypeConstructor.Native(_), _), _) => Nil
+          case (_, Some(Type.Cst(TypeConstructor.Native(_), _))) => Nil
 
-        // Disallow casting a Boolean to another primitive type (symmetric case).
-        case (t1, Some(Type.Bool)) if primitives.filter(_ != Type.Bool).contains(t1) =>
-          ImpossibleUncheckedCast(from, to.get, loc) :: Nil
+          // Disallow casting a Boolean to another primitive type.
+          case (Type.Bool, Some(t2)) if primitives.filter(_ != Type.Bool).contains(t2) =>
+            ImpossibleUncheckedCast(from, to.get, loc) :: Nil
 
-        // Disallowing casting a non-primitive type to a primitive type.
-        case (t1, Some(t2)) if primitives.contains(t1) && !primitives.contains(t2) =>
-          ImpossibleUncheckedCast(from, to.get, loc) :: Nil
+          // Disallow casting a Boolean to another primitive type (symmetric case).
+          case (t1, Some(Type.Bool)) if primitives.filter(_ != Type.Bool).contains(t1) =>
+            ImpossibleUncheckedCast(from, to.get, loc) :: Nil
 
-        // Disallowing casting a non-primitive type to a primitive type (symmetric case).
-        case (t1, Some(t2)) if primitives.contains(t2) && !primitives.contains(t1) =>
-          ImpossibleUncheckedCast(from, to.get, loc) :: Nil
+          // Disallowing casting a non-primitive type to a primitive type.
+          case (t1, Some(t2)) if primitives.contains(t1) && !primitives.contains(t2) =>
+            ImpossibleUncheckedCast(from, to.get, loc) :: Nil
 
-        case _ => Nil
-      }
+          // Disallowing casting a non-primitive type to a primitive type (symmetric case).
+          case (t1, Some(t2)) if primitives.contains(t2) && !primitives.contains(t1) =>
+            ImpossibleUncheckedCast(from, to.get, loc) :: Nil
+
+          case _ => Nil
+        }
+    }
   }
 
   /** Checks the safety and well-formedness of `c`. */
@@ -655,63 +668,67 @@ object Safety extends ValidPhasePlugin[Root, Root] {
    *   - `methods` must not include non-existing methods.
    *   - `methods` must not let control effects escape.
    */
-  private def checkObjectImplementation(newObject: Expr.NewObject)(implicit flix: Flix): List[SafetyError] = newObject match {
-    case Expr.NewObject(_, clazz, tpe0, _, methods, loc) =>
-      val tpe = Type.eraseAliases(tpe0)
-      // `clazz` must be an interface or have a non-private constructor without arguments.
-      val constructorErrors = {
-        if (clazz.isInterface) {
-          List.empty
-        } else {
-          if (hasNonPrivateZeroArgConstructor(clazz)) List.empty
-          else List(NewObjectMissingPublicZeroArgConstructor(clazz, loc))
-        }
-      }
+  private def checkObjectImplementation(newObject: Expr.NewObject)(implicit flix: Flix): List[SafetyError] = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
 
-      // `clazz` must be public.
-      val visibilityErrors = {
-        if (!isPublicClass(clazz)) List(NewObjectNonPublicClass(clazz, loc))
-        else List.empty
-      }
-
-      // `methods` must take the object itself (`this`) as the first argument.
-      val thisErrors = methods.flatMap {
-        case JvmMethod(ident, fparams, _, _, _, methodLoc) =>
-          val firstParam = fparams.head
-          firstParam.tpe match {
-            case t if Type.eraseAliases(t) == tpe =>
-              None
-            case Type.Unit =>
-              // Unit arguments are likely inserted by the compiler.
-              Some(NewObjectMissingThisArg(clazz, ident.name, methodLoc))
-            case _ =>
-              Some(NewObjectIllegalThisType(clazz, firstParam.tpe, ident.name, methodLoc))
+    newObject match {
+      case Expr.NewObject(_, clazz, tpe0, _, methods, loc) =>
+        val tpe = Type.eraseAliases(tpe0)
+        // `clazz` must be an interface or have a non-private constructor without arguments.
+        val constructorErrors = {
+          if (clazz.isInterface) {
+            List.empty
+          } else {
+            if (hasNonPrivateZeroArgConstructor(clazz)) List.empty
+            else List(NewObjectMissingPublicZeroArgConstructor(clazz, loc))
           }
-      }
+        }
 
-      val flixMethods = getFlixMethodSignatures(methods)
-      val implemented = flixMethods.keySet
+        // `clazz` must be public.
+        val visibilityErrors = {
+          if (!isPublicClass(clazz)) List(NewObjectNonPublicClass(clazz, loc))
+          else List.empty
+        }
 
-      val classMethods = getInstanceMethods(clazz)
-      val objectClassMethods = getInstanceMethods(classOf[Object]).keySet
-      val canImplement = classMethods.keySet
-      val mustImplement = canImplement.filter(m =>
-        isAbstractMethod(classMethods(m)) && !objectClassMethods.contains(m)
-      )
+        // `methods` must take the object itself (`this`) as the first argument.
+        val thisErrors = methods.flatMap {
+          case JvmMethod(ident, fparams, _, _, _, methodLoc) =>
+            val firstParam = fparams.head
+            firstParam.tpe match {
+              case t if Type.eraseAliases(t) == tpe =>
+                None
+              case Type.Unit =>
+                // Unit arguments are likely inserted by the compiler.
+                Some(NewObjectMissingThisArg(clazz, ident.name, methodLoc))
+              case _ =>
+                Some(NewObjectIllegalThisType(clazz, firstParam.tpe, ident.name, methodLoc))
+            }
+        }
 
-      // `methods` must include all required signatures (e.g. abstract methods).
-      val unimplemented = mustImplement.diff(implemented)
-      val unimplementedErrors = unimplemented.map(m => NewObjectMissingMethod(clazz, classMethods(m), loc))
+        val flixMethods = getFlixMethodSignatures(methods)
+        val implemented = flixMethods.keySet
 
-      // `methods` must not include non-existing methods.
-      val undefined = implemented.diff(canImplement)
-      val undefinedErrors = undefined.map(m => NewObjectUndefinedMethod(clazz, m.name, flixMethods(m).loc))
+        val classMethods = getInstanceMethods(clazz)
+        val objectClassMethods = getInstanceMethods(classOf[Object]).keySet
+        val canImplement = classMethods.keySet
+        val mustImplement = canImplement.filter(m =>
+          isAbstractMethod(classMethods(m)) && !objectClassMethods.contains(m)
+        )
 
-      // `methods` must not let control effects escape.
-      val controlEffecting = methods.filter(m => hasControlEffects(m.eff))
-      val controlEffectingErrors = controlEffecting.map(m => SafetyError.IllegalMethodEffect(m.eff, m.loc))
+        // `methods` must include all required signatures (e.g. abstract methods).
+        val unimplemented = mustImplement.diff(implemented)
+        val unimplementedErrors = unimplemented.map(m => NewObjectMissingMethod(clazz, classMethods(m), loc))
 
-      constructorErrors ++ visibilityErrors ++ thisErrors ++ unimplementedErrors ++ undefinedErrors ++ controlEffectingErrors
+        // `methods` must not include non-existing methods.
+        val undefined = implemented.diff(canImplement)
+        val undefinedErrors = undefined.map(m => NewObjectUndefinedMethod(clazz, m.name, flixMethods(m).loc))
+
+        // `methods` must not let control effects escape.
+        val controlEffecting = methods.filter(m => hasControlEffects(m.eff))
+        val controlEffectingErrors = controlEffecting.map(m => SafetyError.IllegalMethodEffect(m.eff, m.loc))
+
+        constructorErrors ++ visibilityErrors ++ thisErrors ++ unimplementedErrors ++ undefinedErrors ++ controlEffectingErrors
+    }
   }
 
   /**

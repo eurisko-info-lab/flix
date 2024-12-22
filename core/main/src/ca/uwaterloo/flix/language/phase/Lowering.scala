@@ -16,10 +16,13 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.Type.eraseAliases
+import ca.uwaterloo.flix.language.ast.TypeConstructor.{Receiver, Sender}
 import ca.uwaterloo.flix.language.ast.ops.TypedAstOps
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.ast.shared.SymUse.*
+import ca.uwaterloo.flix.language.ast.shared.ScalaAnnotations.EliminatedBy
 import ca.uwaterloo.flix.language.ast.{AtomicOp, Kind, LoweredAst, Name, Scheme, SourceLocation, Symbol, Type, TypeConstructor, TypedAst}
 import ca.uwaterloo.flix.language.dbg.AstPrinter.DebugLoweredAst
 import ca.uwaterloo.flix.util.{InternalCompilerException, ParOps}
@@ -39,6 +42,8 @@ import ca.uwaterloo.flix.util.{InternalCompilerException, ParOps}
 // - Return a [[Validation]] from visitExp etc.
 // - Decide which expressions to allow as head and body terms.
 
+@EliminatedBy(Sender.getClass)
+@EliminatedBy(Receiver.getClass)
 class Lowering extends CompilerPlugin[TypedAst.Root, LoweredAst.Root] {
   override def name: String = "Lowering"
 
@@ -344,248 +349,251 @@ class Lowering extends CompilerPlugin[TypedAst.Root, LoweredAst.Root] {
   /**
     * Lowers the given expression `exp0`.
     */
-  private def visitExp(exp0: TypedAst.Expr)(implicit scope: Scope, root: TypedAst.Root, flix: Flix): LoweredAst.Expr = exp0 match {
-    case TypedAst.Expr.Cst(cst, tpe, loc) =>
-      val t = visitType(tpe)
-      LoweredAst.Expr.Cst(cst, t, loc)
+  private def visitExp(exp0: TypedAst.Expr)(implicit scope: Scope, root: TypedAst.Root, flix: Flix): LoweredAst.Expr = {
+    implicit val genSym: GenSym = flix.genSym
 
-    case TypedAst.Expr.Var(sym, tpe, loc) =>
-      val t = visitType(tpe)
-      LoweredAst.Expr.Var(sym, t, loc)
+    exp0 match {
+      case TypedAst.Expr.Cst(cst, tpe, loc) =>
+        val t = visitType(tpe)
+        LoweredAst.Expr.Cst(cst, t, loc)
 
-    case TypedAst.Expr.Hole(sym, tpe, eff, loc) =>
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.HoleError(sym), List.empty, t, eff, loc)
+      case TypedAst.Expr.Var(sym, tpe, loc) =>
+        val t = visitType(tpe)
+        LoweredAst.Expr.Var(sym, t, loc)
 
-    case TypedAst.Expr.HoleWithExp(_, tpe, _, loc) =>
-      val sym = Symbol.freshHoleSym(loc)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.HoleError(sym), List.empty, t, Type.Pure, loc)
+      case TypedAst.Expr.Hole(sym, tpe, eff, loc) =>
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.HoleError(sym), List.empty, t, eff, loc)
 
-    case TypedAst.Expr.OpenAs(sym, exp, tpe, loc) =>
-      visitExp(exp) // TODO RESTR-VARS maybe add to loweredAST
+      case TypedAst.Expr.HoleWithExp(_, tpe, _, loc) =>
+        val sym = Symbol.freshHoleSym(loc)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.HoleError(sym), List.empty, t, Type.Pure, loc)
 
-    case TypedAst.Expr.Use(_, _, exp, _) =>
-      visitExp(exp)
+      case TypedAst.Expr.OpenAs(sym, exp, tpe, loc) =>
+        visitExp(exp) // TODO RESTR-VARS maybe add to loweredAST
 
-    case TypedAst.Expr.Lambda(fparam, exp, tpe, loc) =>
-      val p = visitFormalParam(fparam)
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.Lambda(p, e, t, loc)
+      case TypedAst.Expr.Use(_, _, exp, _) =>
+        visitExp(exp)
 
-    case TypedAst.Expr.ApplyClo(exp1, exp2, tpe, eff, loc) =>
-      val e1 = visitExp(exp1)
-      val e2 = visitExp(exp2)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyClo(e1, e2, t, eff, loc)
+      case TypedAst.Expr.Lambda(fparam, exp, tpe, loc) =>
+        val p = visitFormalParam(fparam)
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.Lambda(p, e, t, loc)
 
-    case TypedAst.Expr.ApplyDef(DefSymUse(sym, _), exps, itpe, tpe, eff, loc) =>
-      val es = exps.map(visitExp)
-      val it = visitType(itpe)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyDef(sym, es, it, t, eff, loc)
+      case TypedAst.Expr.ApplyClo(exp1, exp2, tpe, eff, loc) =>
+        val e1 = visitExp(exp1)
+        val e2 = visitExp(exp2)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyClo(e1, e2, t, eff, loc)
 
-    case TypedAst.Expr.ApplyLocalDef(LocalDefSymUse(sym, _), exps, arrowTpe, tpe, eff, loc) =>
-      val es = exps.map(visitExp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyLocalDef(sym, es, t, eff, loc)
+      case TypedAst.Expr.ApplyDef(DefSymUse(sym, _), exps, itpe, tpe, eff, loc) =>
+        val es = exps.map(visitExp)
+        val it = visitType(itpe)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyDef(sym, es, it, t, eff, loc)
 
-    case TypedAst.Expr.ApplySig(SigSymUse(sym, _), exps, itpe, tpe, eff, loc) =>
-      val es = exps.map(visitExp)
-      val it = visitType(itpe)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplySig(sym, es, it, t, eff, loc)
+      case TypedAst.Expr.ApplyLocalDef(LocalDefSymUse(sym, _), exps, arrowTpe, tpe, eff, loc) =>
+        val es = exps.map(visitExp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyLocalDef(sym, es, t, eff, loc)
 
-    case TypedAst.Expr.Unary(sop, exp, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.Unary(sop), List(e), t, eff, loc)
+      case TypedAst.Expr.ApplySig(SigSymUse(sym, _), exps, itpe, tpe, eff, loc) =>
+        val es = exps.map(visitExp)
+        val it = visitType(itpe)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplySig(sym, es, it, t, eff, loc)
 
-    case TypedAst.Expr.Binary(sop, exp1, exp2, tpe, eff, loc) =>
-      val e1 = visitExp(exp1)
-      val e2 = visitExp(exp2)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.Binary(sop), List(e1, e2), t, eff, loc)
+      case TypedAst.Expr.Unary(sop, exp, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.Unary(sop), List(e), t, eff, loc)
 
-    case TypedAst.Expr.Let(bnd, exp1, exp2, tpe, eff, loc) =>
-      val e1 = visitExp(exp1)
-      val e2 = visitExp(exp2)
-      val t = visitType(tpe)
-      LoweredAst.Expr.Let(bnd.sym, e1, e2, t, eff, loc)
+      case TypedAst.Expr.Binary(sop, exp1, exp2, tpe, eff, loc) =>
+        val e1 = visitExp(exp1)
+        val e2 = visitExp(exp2)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.Binary(sop), List(e1, e2), t, eff, loc)
 
-    case TypedAst.Expr.LocalDef(TypedAst.Binder(sym, _), fparams, exp1, exp2, tpe, eff, loc) =>
-      val fps = fparams.map(visitFormalParam)
-      val e1 = visitExp(exp1)
-      val e2 = visitExp(exp2)
-      val t = visitType(tpe)
-      LoweredAst.Expr.LocalDef(sym, fps, e1, e2, t, eff, loc)
+      case TypedAst.Expr.Let(bnd, exp1, exp2, tpe, eff, loc) =>
+        val e1 = visitExp(exp1)
+        val e2 = visitExp(exp2)
+        val t = visitType(tpe)
+        LoweredAst.Expr.Let(bnd.sym, e1, e2, t, eff, loc)
 
-    case TypedAst.Expr.Region(tpe, loc) =>
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.Region, List.empty, t, Type.Pure, loc)
+      case TypedAst.Expr.LocalDef(TypedAst.Binder(sym, _), fparams, exp1, exp2, tpe, eff, loc) =>
+        val fps = fparams.map(visitFormalParam)
+        val e1 = visitExp(exp1)
+        val e2 = visitExp(exp2)
+        val t = visitType(tpe)
+        LoweredAst.Expr.LocalDef(sym, fps, e1, e2, t, eff, loc)
 
-    case TypedAst.Expr.Scope(TypedAst.Binder(sym, _), regionVar, exp, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.Scope(sym, regionVar, e, t, eff, loc)
+      case TypedAst.Expr.Region(tpe, loc) =>
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.Region, List.empty, t, Type.Pure, loc)
 
-    case TypedAst.Expr.IfThenElse(exp1, exp2, exp3, tpe, eff, loc) =>
-      val e1 = visitExp(exp1)
-      val e2 = visitExp(exp2)
-      val e3 = visitExp(exp3)
-      val t = visitType(tpe)
-      LoweredAst.Expr.IfThenElse(e1, e2, e3, t, eff, loc)
+      case TypedAst.Expr.Scope(TypedAst.Binder(sym, _), regionVar, exp, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.Scope(sym, regionVar, e, t, eff, loc)
 
-    case TypedAst.Expr.Stm(exp1, exp2, tpe, eff, loc) =>
-      val e1 = visitExp(exp1)
-      val e2 = visitExp(exp2)
-      val t = visitType(tpe)
-      LoweredAst.Expr.Stm(e1, e2, t, eff, loc)
+      case TypedAst.Expr.IfThenElse(exp1, exp2, exp3, tpe, eff, loc) =>
+        val e1 = visitExp(exp1)
+        val e2 = visitExp(exp2)
+        val e3 = visitExp(exp3)
+        val t = visitType(tpe)
+        LoweredAst.Expr.IfThenElse(e1, e2, e3, t, eff, loc)
 
-    case TypedAst.Expr.Discard(exp, eff, loc) =>
-      val e = visitExp(exp)
-      LoweredAst.Expr.Discard(e, eff, loc)
+      case TypedAst.Expr.Stm(exp1, exp2, tpe, eff, loc) =>
+        val e1 = visitExp(exp1)
+        val e2 = visitExp(exp2)
+        val t = visitType(tpe)
+        LoweredAst.Expr.Stm(e1, e2, t, eff, loc)
 
-    case TypedAst.Expr.Match(exp, rules, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val rs = rules.map(visitMatchRule)
-      val t = visitType(tpe)
-      LoweredAst.Expr.Match(e, rs, t, eff, loc)
+      case TypedAst.Expr.Discard(exp, eff, loc) =>
+        val e = visitExp(exp)
+        LoweredAst.Expr.Discard(e, eff, loc)
 
-    case TypedAst.Expr.TypeMatch(exp, rules, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val rs = rules.map(visitTypeMatchRule)
-      val t = visitType(tpe)
-      LoweredAst.Expr.TypeMatch(e, rs, t, eff, loc)
+      case TypedAst.Expr.Match(exp, rules, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val rs = rules.map(visitMatchRule)
+        val t = visitType(tpe)
+        LoweredAst.Expr.Match(e, rs, t, eff, loc)
 
-    case TypedAst.Expr.RestrictableChoose(_, exp, rules, tpe, eff, loc) =>
-      // lower into an ordinary match
-      val e = visitExp(exp)
-      val rs = rules.map(visitRestrictableChooseRule)
-      val t = visitType(tpe)
-      LoweredAst.Expr.Match(e, rs, t, eff, loc)
+      case TypedAst.Expr.TypeMatch(exp, rules, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val rs = rules.map(visitTypeMatchRule)
+        val t = visitType(tpe)
+        LoweredAst.Expr.TypeMatch(e, rs, t, eff, loc)
 
-    case TypedAst.Expr.Tag(sym, exps, tpe, eff, loc) =>
-      val es = exps.map(visitExp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.Tag(sym.sym), es, t, eff, loc)
+      case TypedAst.Expr.RestrictableChoose(_, exp, rules, tpe, eff, loc) =>
+        // lower into an ordinary match
+        val e = visitExp(exp)
+        val rs = rules.map(visitRestrictableChooseRule)
+        val t = visitType(tpe)
+        LoweredAst.Expr.Match(e, rs, t, eff, loc)
 
-    case TypedAst.Expr.RestrictableTag(sym0, exps, tpe, eff, loc) =>
-      // Lower a restrictable tag into a normal tag.
-      val caseSym = visitRestrictableCaseSym(sym0.sym)
-      val es = exps.map(visitExp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.Tag(caseSym), es, t, eff, loc)
+      case TypedAst.Expr.Tag(sym, exps, tpe, eff, loc) =>
+        val es = exps.map(visitExp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.Tag(sym.sym), es, t, eff, loc)
 
-    case TypedAst.Expr.Tuple(elms, tpe, eff, loc) =>
-      val es = elms.map(visitExp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.Tuple, es, t, eff, loc)
+      case TypedAst.Expr.RestrictableTag(sym0, exps, tpe, eff, loc) =>
+        // Lower a restrictable tag into a normal tag.
+        val caseSym = visitRestrictableCaseSym(sym0.sym)
+        val es = exps.map(visitExp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.Tag(caseSym), es, t, eff, loc)
 
-    case TypedAst.Expr.RecordEmpty(tpe, loc) =>
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.RecordEmpty, List.empty, t, Type.Pure, loc)
+      case TypedAst.Expr.Tuple(elms, tpe, eff, loc) =>
+        val es = elms.map(visitExp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.Tuple, es, t, eff, loc)
 
-    case TypedAst.Expr.RecordSelect(exp, label, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.RecordSelect(label), List(e), t, eff, loc)
+      case TypedAst.Expr.RecordEmpty(tpe, loc) =>
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.RecordEmpty, List.empty, t, Type.Pure, loc)
 
-    case TypedAst.Expr.RecordExtend(label, exp1, exp2, tpe, eff, loc) =>
-      val e1 = visitExp(exp1)
-      val e2 = visitExp(exp2)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.RecordExtend(label), List(e1, e2), t, eff, loc)
+      case TypedAst.Expr.RecordSelect(exp, label, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.RecordSelect(label), List(e), t, eff, loc)
 
-    case TypedAst.Expr.RecordRestrict(label, exp, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.RecordRestrict(label), List(e), t, eff, loc)
+      case TypedAst.Expr.RecordExtend(label, exp1, exp2, tpe, eff, loc) =>
+        val e1 = visitExp(exp1)
+        val e2 = visitExp(exp2)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.RecordExtend(label), List(e1, e2), t, eff, loc)
 
-    case TypedAst.Expr.ArrayLit(exps, exp, tpe, eff, loc) =>
-      val es = exps.map(visitExp)
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.ArrayLit, e :: es, t, eff, loc)
+      case TypedAst.Expr.RecordRestrict(label, exp, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.RecordRestrict(label), List(e), t, eff, loc)
 
-    case TypedAst.Expr.ArrayNew(exp1, exp2, exp3, tpe, eff, loc) =>
-      val e1 = visitExp(exp1)
-      val e2 = visitExp(exp2)
-      val e3 = visitExp(exp3)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.ArrayNew, List(e1, e2, e3), t, eff, loc)
+      case TypedAst.Expr.ArrayLit(exps, exp, tpe, eff, loc) =>
+        val es = exps.map(visitExp)
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.ArrayLit, e :: es, t, eff, loc)
 
-    case TypedAst.Expr.ArrayLoad(exp1, exp2, tpe, eff, loc) =>
-      val e1 = visitExp(exp1)
-      val e2 = visitExp(exp2)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.ArrayLoad, List(e1, e2), t, eff, loc)
+      case TypedAst.Expr.ArrayNew(exp1, exp2, exp3, tpe, eff, loc) =>
+        val e1 = visitExp(exp1)
+        val e2 = visitExp(exp2)
+        val e3 = visitExp(exp3)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.ArrayNew, List(e1, e2, e3), t, eff, loc)
 
-    case TypedAst.Expr.ArrayLength(exp, eff, loc) =>
-      val e = visitExp(exp)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.ArrayLength, List(e), Type.Int32, eff, loc)
+      case TypedAst.Expr.ArrayLoad(exp1, exp2, tpe, eff, loc) =>
+        val e1 = visitExp(exp1)
+        val e2 = visitExp(exp2)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.ArrayLoad, List(e1, e2), t, eff, loc)
 
-    case TypedAst.Expr.ArrayStore(exp1, exp2, exp3, eff, loc) =>
-      val e1 = visitExp(exp1)
-      val e2 = visitExp(exp2)
-      val e3 = visitExp(exp3)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.ArrayStore, List(e1, e2, e3), Type.Unit, eff, loc)
+      case TypedAst.Expr.ArrayLength(exp, eff, loc) =>
+        val e = visitExp(exp)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.ArrayLength, List(e), Type.Int32, eff, loc)
 
-    case TypedAst.Expr.StructNew(sym, fields0, region0, tpe, eff, loc) =>
-      val fields = fields0.map { case (k, v) => (k, visitExp(v)) }
-      val region = visitExp(region0)
-      val (names0, es) = fields.unzip
-      val names = names0.map(_.sym)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.StructNew(sym, names), region :: es, tpe, eff, loc)
+      case TypedAst.Expr.ArrayStore(exp1, exp2, exp3, eff, loc) =>
+        val e1 = visitExp(exp1)
+        val e2 = visitExp(exp2)
+        val e3 = visitExp(exp3)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.ArrayStore, List(e1, e2, e3), Type.Unit, eff, loc)
 
-    case TypedAst.Expr.StructGet(exp0, field, tpe, eff, loc) =>
-      val exp = visitExp(exp0)
-      val idx = field.sym.idx
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.StructGet(field.sym), List(exp), tpe, eff, loc)
+      case TypedAst.Expr.StructNew(sym, fields0, region0, tpe, eff, loc) =>
+        val fields = fields0.map { case (k, v) => (k, visitExp(v)) }
+        val region = visitExp(region0)
+        val (names0, es) = fields.unzip
+        val names = names0.map(_.sym)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.StructNew(sym, names), region :: es, tpe, eff, loc)
 
-    case TypedAst.Expr.StructPut(exp0, field, exp1, tpe, eff, loc) =>
-      val struct = visitExp(exp0)
-      val rhs = visitExp(exp1)
-      val idx = field.sym.idx
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.StructPut(field.sym), List(struct, rhs), tpe, eff, loc)
+      case TypedAst.Expr.StructGet(exp0, field, tpe, eff, loc) =>
+        val exp = visitExp(exp0)
+        val idx = field.sym.idx
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.StructGet(field.sym), List(exp), tpe, eff, loc)
 
-    case TypedAst.Expr.VectorLit(exps, tpe, eff, loc) =>
-      val es = exps.map(visitExp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.VectorLit(es, t, eff, loc)
+      case TypedAst.Expr.StructPut(exp0, field, exp1, tpe, eff, loc) =>
+        val struct = visitExp(exp0)
+        val rhs = visitExp(exp1)
+        val idx = field.sym.idx
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.StructPut(field.sym), List(struct, rhs), tpe, eff, loc)
 
-    case TypedAst.Expr.VectorLoad(base, index, tpe, eff, loc) =>
-      val b = visitExp(base)
-      val i = visitExp(index)
-      val t = visitType(tpe)
-      LoweredAst.Expr.VectorLoad(b, i, t, eff, loc)
+      case TypedAst.Expr.VectorLit(exps, tpe, eff, loc) =>
+        val es = exps.map(visitExp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.VectorLit(es, t, eff, loc)
 
-    case TypedAst.Expr.VectorLength(base, loc) =>
-      val b = visitExp(base)
-      LoweredAst.Expr.VectorLength(b, loc)
+      case TypedAst.Expr.VectorLoad(base, index, tpe, eff, loc) =>
+        val b = visitExp(base)
+        val i = visitExp(index)
+        val t = visitType(tpe)
+        LoweredAst.Expr.VectorLoad(b, i, t, eff, loc)
 
-    case TypedAst.Expr.Ascribe(exp, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.Ascribe(e, t, eff, loc)
+      case TypedAst.Expr.VectorLength(base, loc) =>
+        val b = visitExp(base)
+        LoweredAst.Expr.VectorLength(b, loc)
 
-    case TypedAst.Expr.InstanceOf(exp, clazz, loc) =>
-      val e = visitExp(exp)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.InstanceOf(clazz), List(e), Type.Bool, e.eff, loc)
+      case TypedAst.Expr.Ascribe(exp, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.Ascribe(e, t, eff, loc)
 
-    case TypedAst.Expr.CheckedCast(_, exp, tpe, eff, loc) =>
-      // Note: We do *NOT* erase checked (i.e. safe) casts.
-      // In Java, `String` is a subtype of `Object`, but the Flix IR makes this upcast _explicit_.
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.Cast(e, Some(t), None, t, eff, loc)
+      case TypedAst.Expr.InstanceOf(exp, clazz, loc) =>
+        val e = visitExp(exp)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.InstanceOf(clazz), List(e), Type.Bool, e.eff, loc)
 
-    case TypedAst.Expr.UncheckedCast(exp, declaredType, declaredEff, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val dt = declaredType.map(visitType)
-      val t = visitType(tpe)
-      LoweredAst.Expr.Cast(e, dt, declaredEff, t, eff, loc)
+      case TypedAst.Expr.CheckedCast(_, exp, tpe, eff, loc) =>
+        // Note: We do *NOT* erase checked (i.e. safe) casts.
+        // In Java, `String` is a subtype of `Object`, but the Flix IR makes this upcast _explicit_.
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.Cast(e, Some(t), None, t, eff, loc)
+
+      case TypedAst.Expr.UncheckedCast(exp, declaredType, declaredEff, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val dt = declaredType.map(visitType)
+        val t = visitType(tpe)
+        LoweredAst.Expr.Cast(e, dt, declaredEff, t, eff, loc)
 
     case TypedAst.Expr.Unsafe(exp, _, tpe, eff, loc) =>
       val e = visitExp(exp)
@@ -594,233 +602,234 @@ class Lowering extends CompilerPlugin[TypedAst.Root, LoweredAst.Root] {
     case TypedAst.Expr.Without(exp, _, _, _, _) =>
       visitExp(exp)
 
-    case TypedAst.Expr.TryCatch(exp, rules, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val rs = rules.map(visitCatchRule)
-      val t = visitType(tpe)
-      LoweredAst.Expr.TryCatch(e, rs, t, eff, loc)
+      case TypedAst.Expr.TryCatch(exp, rules, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val rs = rules.map(visitCatchRule)
+        val t = visitType(tpe)
+        LoweredAst.Expr.TryCatch(e, rs, t, eff, loc)
 
-    case TypedAst.Expr.Throw(exp, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.Throw, List(e), t, eff, loc)
+      case TypedAst.Expr.Throw(exp, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.Throw, List(e), t, eff, loc)
 
-    case TypedAst.Expr.TryWith(exp, sym, rules, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val rs = rules.map(visitHandlerRule)
-      val t = visitType(tpe)
-      LoweredAst.Expr.TryWith(e, sym, rs, t, eff, loc)
+      case TypedAst.Expr.TryWith(exp, sym, rules, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val rs = rules.map(visitHandlerRule)
+        val t = visitType(tpe)
+        LoweredAst.Expr.TryWith(e, sym, rs, t, eff, loc)
 
-    case TypedAst.Expr.Do(sym, exps, tpe, eff, loc) =>
-      val es = exps.map(visitExp)
-      LoweredAst.Expr.Do(sym, es, tpe, eff, loc)
+      case TypedAst.Expr.Do(sym, exps, tpe, eff, loc) =>
+        val es = exps.map(visitExp)
+        LoweredAst.Expr.Do(sym, es, tpe, eff, loc)
 
-    case TypedAst.Expr.InvokeConstructor(constructor, exps, tpe, eff, loc) =>
-      val es = exps.map(visitExp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.InvokeConstructor(constructor), es, t, eff, loc)
+      case TypedAst.Expr.InvokeConstructor(constructor, exps, tpe, eff, loc) =>
+        val es = exps.map(visitExp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.InvokeConstructor(constructor), es, t, eff, loc)
 
-    case TypedAst.Expr.InvokeMethod(method, exp, exps, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val es = exps.map(visitExp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.InvokeMethod(method), e :: es, t, eff, loc)
+      case TypedAst.Expr.InvokeMethod(method, exp, exps, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val es = exps.map(visitExp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.InvokeMethod(method), e :: es, t, eff, loc)
 
-    case TypedAst.Expr.InvokeStaticMethod(method, exps, tpe, eff, loc) =>
-      val es = exps.map(visitExp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.InvokeStaticMethod(method), es, t, eff, loc)
+      case TypedAst.Expr.InvokeStaticMethod(method, exps, tpe, eff, loc) =>
+        val es = exps.map(visitExp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.InvokeStaticMethod(method), es, t, eff, loc)
 
-    case TypedAst.Expr.GetField(field, exp, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.GetField(field), List(e), t, eff, loc)
+      case TypedAst.Expr.GetField(field, exp, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.GetField(field), List(e), t, eff, loc)
 
-    case TypedAst.Expr.PutField(field, exp1, exp2, tpe, eff, loc) =>
-      val e1 = visitExp(exp1)
-      val e2 = visitExp(exp2)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.PutField(field), List(e1, e2), t, eff, loc)
+      case TypedAst.Expr.PutField(field, exp1, exp2, tpe, eff, loc) =>
+        val e1 = visitExp(exp1)
+        val e2 = visitExp(exp2)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.PutField(field), List(e1, e2), t, eff, loc)
 
-    case TypedAst.Expr.GetStaticField(field, tpe, eff, loc) =>
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.GetStaticField(field), List.empty, t, eff, loc)
+      case TypedAst.Expr.GetStaticField(field, tpe, eff, loc) =>
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.GetStaticField(field), List.empty, t, eff, loc)
 
-    case TypedAst.Expr.PutStaticField(field, exp, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.PutStaticField(field), List(e), t, eff, loc)
+      case TypedAst.Expr.PutStaticField(field, exp, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.PutStaticField(field), List(e), t, eff, loc)
 
-    case TypedAst.Expr.NewObject(name, clazz, tpe, eff, methods, loc) =>
-      val t = visitType(tpe)
-      val ms = methods.map(visitJvmMethod)
-      LoweredAst.Expr.NewObject(name, clazz, t, eff, ms, loc)
+      case TypedAst.Expr.NewObject(name, clazz, tpe, eff, methods, loc) =>
+        val t = visitType(tpe)
+        val ms = methods.map(visitJvmMethod)
+        LoweredAst.Expr.NewObject(name, clazz, t, eff, ms, loc)
 
-    // New channel expressions are rewritten as follows:
-    //     $CHANNEL_NEW$(m)
-    // becomes a call to the standard library function:
-    //     Concurrent/Channel.newChannel(10)
-    //
-    case TypedAst.Expr.NewChannel(exp, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      mkNewChannelTuple(e, t, eff, loc)
+      // New channel expressions are rewritten as follows:
+      //     $CHANNEL_NEW$(m)
+      // becomes a call to the standard library function:
+      //     Concurrent/Channel.newChannel(10)
+      //
+      case TypedAst.Expr.NewChannel(exp, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        mkNewChannelTuple(e, t, eff, loc)
 
-    // Channel get expressions are rewritten as follows:
-    //     <- c
-    // becomes a call to the standard library function:
-    //     Concurrent/Channel.get(c)
-    //
-    case TypedAst.Expr.GetChannel(exp, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      mkGetChannel(e, t, eff, loc)
+      // Channel get expressions are rewritten as follows:
+      //     <- c
+      // becomes a call to the standard library function:
+      //     Concurrent/Channel.get(c)
+      //
+      case TypedAst.Expr.GetChannel(exp, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        mkGetChannel(e, t, eff, loc)
 
-    // Channel put expressions are rewritten as follows:
-    //     c <- 42
-    // becomes a call to the standard library function:
-    //     Concurrent/Channel.put(42, c)
-    //
-    case TypedAst.Expr.PutChannel(exp1, exp2, _, eff, loc) =>
-      val e1 = visitExp(exp1)
-      val e2 = visitExp(exp2)
-      mkPutChannel(e1, e2, eff, loc)
+      // Channel put expressions are rewritten as follows:
+      //     c <- 42
+      // becomes a call to the standard library function:
+      //     Concurrent/Channel.put(42, c)
+      //
+      case TypedAst.Expr.PutChannel(exp1, exp2, _, eff, loc) =>
+        val e1 = visitExp(exp1)
+        val e2 = visitExp(exp2)
+        mkPutChannel(e1, e2, eff, loc)
 
-    // Channel select expressions are rewritten as follows:
-    //     select {
-    //         case x <- ?ch1 => ?handlech1
-    //         case y <- ?ch2 => ?handlech2
-    //         case _ => ?default
-    //     }
-    // becomes:
-    //     let ch1 = ?ch1;
-    //     let ch2 = ?ch2;
-    //     match selectFrom(mpmcAdmin(ch1) :: mpmcAdmin(ch2) :: Nil, false) {  // true if no default
-    //         case (0, locks) =>
-    //             let x = unsafeGetAndUnlock(ch1, locks);
-    //             ?handlech1
-    //         case (1, locks) =>
-    //             let y = unsafeGetAndUnlock(ch2, locks);
-    //             ?handlech2
-    //         case (-1, _) =>                                                  // Omitted if no default
-    //             ?default                                                     // Unlock is handled by selectFrom
-    //     }
-    // Note: match is not exhaustive: we're relying on the simplifier to handle this for us
-    //
-    case TypedAst.Expr.SelectChannel(rules, default, tpe, eff, loc) =>
-      val rs = rules.map(visitSelectChannelRule)
-      val d = default.map(visitExp)
-      val t = visitType(tpe)
+      // Channel select expressions are rewritten as follows:
+      //     select {
+      //         case x <- ?ch1 => ?handlech1
+      //         case y <- ?ch2 => ?handlech2
+      //         case _ => ?default
+      //     }
+      // becomes:
+      //     let ch1 = ?ch1;
+      //     let ch2 = ?ch2;
+      //     match selectFrom(mpmcAdmin(ch1) :: mpmcAdmin(ch2) :: Nil, false) {  // true if no default
+      //         case (0, locks) =>
+      //             let x = unsafeGetAndUnlock(ch1, locks);
+      //             ?handlech1
+      //         case (1, locks) =>
+      //             let y = unsafeGetAndUnlock(ch2, locks);
+      //             ?handlech2
+      //         case (-1, _) =>                                                  // Omitted if no default
+      //             ?default                                                     // Unlock is handled by selectFrom
+      //     }
+      // Note: match is not exhaustive: we're relying on the simplifier to handle this for us
+      //
+      case TypedAst.Expr.SelectChannel(rules, default, tpe, eff, loc) =>
+        val rs = rules.map(visitSelectChannelRule)
+        val d = default.map(visitExp)
+        val t = visitType(tpe)
 
-      val channels = rs map { case LoweredAst.SelectChannelRule(_, c, _) => (mkLetSym("chan", loc), c) }
-      val admins = mkChannelAdminList(rs, channels, loc)
-      val selectExp = mkChannelSelect(admins, d, loc)
-      val cases = mkChannelCases(rs, channels, eff, loc)
-      val defaultCase = mkSelectDefaultCase(d, t, loc)
-      val matchExp = LoweredAst.Expr.Match(selectExp, cases ++ defaultCase, t, eff, loc)
+        val channels = rs map { case LoweredAst.SelectChannelRule(_, c, _) => (mkLetSym("chan", loc), c) }
+        val admins = mkChannelAdminList(rs, channels, loc)
+        val selectExp = mkChannelSelect(admins, d, loc)
+        val cases = mkChannelCases(rs, channels, eff, loc)
+        val defaultCase = mkSelectDefaultCase(d, t, loc)
+        val matchExp = LoweredAst.Expr.Match(selectExp, cases ++ defaultCase, t, eff, loc)
 
-      channels.foldRight[LoweredAst.Expr](matchExp) {
-        case ((sym, c), e) => LoweredAst.Expr.Let(sym, c, e, t, eff, loc)
-      }
-
-    case TypedAst.Expr.Spawn(exp1, exp2, tpe, eff, loc) =>
-      val e1 = visitExp(exp1)
-      val e2 = visitExp(exp2)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.Spawn, List(e1, e2), t, eff, loc)
-
-    case TypedAst.Expr.ParYield(frags, exp, tpe, eff, loc) =>
-      val fs = frags.map {
-        case TypedAst.ParYieldFragment(pat, e, loc) => LoweredAst.ParYieldFragment(visitPat(pat), visitExp(e), loc)
-      }
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      mkParYield(fs, e, t, eff, loc)
-
-    case TypedAst.Expr.Lazy(exp, tpe, loc) =>
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.Lazy, List(e), t, Type.Pure, loc)
-
-    case TypedAst.Expr.Force(exp, tpe, eff, loc) =>
-      val e = visitExp(exp)
-      val t = visitType(tpe)
-      LoweredAst.Expr.ApplyAtomic(AtomicOp.Force, List(e), t, eff, loc)
-
-    case TypedAst.Expr.FixpointConstraintSet(cs, _, loc) =>
-      mkDatalog(cs, loc)
-
-    case TypedAst.Expr.FixpointLambda(pparams, exp, _, eff, loc) =>
-      val defn = Defs.lookup(Defs.Rename)
-      val predExps = mkList(pparams.map(pparam => mkPredSym(pparam.pred)), Types.PredSym, loc)
-      val argExps = predExps :: visitExp(exp) :: Nil
-      val resultType = Types.Datalog
-      LoweredAst.Expr.ApplyDef(defn.sym, argExps, Types.RenameType, resultType, eff, loc)
-
-    case TypedAst.Expr.FixpointMerge(exp1, exp2, _, eff, loc) =>
-      val defn = Defs.lookup(Defs.Merge)
-      val argExps = visitExp(exp1) :: visitExp(exp2) :: Nil
-      val resultType = Types.Datalog
-      LoweredAst.Expr.ApplyDef(defn.sym, argExps, Types.MergeType, resultType, eff, loc)
-
-    case TypedAst.Expr.FixpointSolve(exp, _, eff, loc) =>
-      val defn = Defs.lookup(Defs.Solve)
-      val argExps = visitExp(exp) :: Nil
-      val resultType = Types.Datalog
-      LoweredAst.Expr.ApplyDef(defn.sym, argExps, Types.SolveType, resultType, eff, loc)
-
-    case TypedAst.Expr.FixpointFilter(pred, exp, _, eff, loc) =>
-      val defn = Defs.lookup(Defs.Filter)
-      val argExps = mkPredSym(pred) :: visitExp(exp) :: Nil
-      val resultType = Types.Datalog
-      LoweredAst.Expr.ApplyDef(defn.sym, argExps, Types.FilterType, resultType, eff, loc)
-
-    case TypedAst.Expr.FixpointInject(exp, pred, _, eff, loc) =>
-      // Compute the arity of the functor F[(a, b, c)] or F[a].
-      val arity = Type.eraseAliases(exp.tpe) match {
-        case Type.Apply(_, innerType, _) => innerType.typeConstructor match {
-          case Some(TypeConstructor.Tuple(l)) => l
-          case Some(TypeConstructor.Unit) => 0
-          case _ => 1
+        channels.foldRight[LoweredAst.Expr](matchExp) {
+          case ((sym, c), e) => LoweredAst.Expr.Let(sym, c, e, t, eff, loc)
         }
-        case _ => throw InternalCompilerException(s"Unexpected non-foldable type: '${exp.tpe}'.", loc)
-      }
 
-      // Compute the symbol of the function.
-      val sym = Defs.ProjectInto(arity)
+      case TypedAst.Expr.Spawn(exp1, exp2, tpe, eff, loc) =>
+        val e1 = visitExp(exp1)
+        val e2 = visitExp(exp2)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.Spawn, List(e1, e2), t, eff, loc)
 
-      // The type of the function.
-      val defTpe = Type.mkPureUncurriedArrow(List(Types.PredSym, exp.tpe), Types.Datalog, loc)
-
-      // Put everything together.
-      val argExps = mkPredSym(pred) :: visitExp(exp) :: Nil
-      LoweredAst.Expr.ApplyDef(sym, argExps, defTpe, Types.Datalog, eff, loc)
-
-    case TypedAst.Expr.FixpointProject(pred, exp, tpe, eff, loc) =>
-      // Compute the arity of the predicate symbol.
-      // The type is either of the form `Array[(a, b, c)]` or `Array[a]`.
-      val arity = Type.eraseAliases(tpe) match {
-        case Type.Apply(Type.Cst(_, _), innerType, _) => innerType.typeConstructor match {
-          case Some(TypeConstructor.Tuple(_)) => innerType.typeArguments.length
-          case Some(TypeConstructor.Unit) => 0
-          case _ => 1
+      case TypedAst.Expr.ParYield(frags, exp, tpe, eff, loc) =>
+        val fs = frags.map {
+          case TypedAst.ParYieldFragment(pat, e, loc) => LoweredAst.ParYieldFragment(visitPat(pat), visitExp(e), loc)
         }
-        case _ => throw InternalCompilerException(s"Unexpected non-list type: '$tpe'.", loc)
-      }
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        mkParYield(fs, e, t, eff, loc)
 
-      // Compute the symbol of the function.
-      val sym = Defs.Facts(arity)
+      case TypedAst.Expr.Lazy(exp, tpe, loc) =>
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.Lazy, List(e), t, Type.Pure, loc)
 
-      // The type of the function.
-      val defTpe = Type.mkPureUncurriedArrow(List(Types.PredSym, Types.Datalog), tpe, loc)
+      case TypedAst.Expr.Force(exp, tpe, eff, loc) =>
+        val e = visitExp(exp)
+        val t = visitType(tpe)
+        LoweredAst.Expr.ApplyAtomic(AtomicOp.Force, List(e), t, eff, loc)
 
-      // Put everything together.
-      val argExps = mkPredSym(pred) :: visitExp(exp) :: Nil
-      LoweredAst.Expr.ApplyDef(sym, argExps, defTpe, tpe, eff, loc)
+      case TypedAst.Expr.FixpointConstraintSet(cs, _, loc) =>
+        mkDatalog(cs, loc)
 
-    case TypedAst.Expr.Error(m, _, _) =>
-      throw InternalCompilerException(s"Unexpected error expression near", m.loc)
+      case TypedAst.Expr.FixpointLambda(pparams, exp, _, eff, loc) =>
+        val defn = Defs.lookup(Defs.Rename)
+        val predExps = mkList(pparams.map(pparam => mkPredSym(pparam.pred)), Types.PredSym, loc)
+        val argExps = predExps :: visitExp(exp) :: Nil
+        val resultType = Types.Datalog
+        LoweredAst.Expr.ApplyDef(defn.sym, argExps, Types.RenameType, resultType, eff, loc)
 
+      case TypedAst.Expr.FixpointMerge(exp1, exp2, _, eff, loc) =>
+        val defn = Defs.lookup(Defs.Merge)
+        val argExps = visitExp(exp1) :: visitExp(exp2) :: Nil
+        val resultType = Types.Datalog
+        LoweredAst.Expr.ApplyDef(defn.sym, argExps, Types.MergeType, resultType, eff, loc)
+
+      case TypedAst.Expr.FixpointSolve(exp, _, eff, loc) =>
+        val defn = Defs.lookup(Defs.Solve)
+        val argExps = visitExp(exp) :: Nil
+        val resultType = Types.Datalog
+        LoweredAst.Expr.ApplyDef(defn.sym, argExps, Types.SolveType, resultType, eff, loc)
+
+      case TypedAst.Expr.FixpointFilter(pred, exp, _, eff, loc) =>
+        val defn = Defs.lookup(Defs.Filter)
+        val argExps = mkPredSym(pred) :: visitExp(exp) :: Nil
+        val resultType = Types.Datalog
+        LoweredAst.Expr.ApplyDef(defn.sym, argExps, Types.FilterType, resultType, eff, loc)
+
+      case TypedAst.Expr.FixpointInject(exp, pred, _, eff, loc) =>
+        // Compute the arity of the functor F[(a, b, c)] or F[a].
+        val arity = Type.eraseAliases(exp.tpe) match {
+          case Type.Apply(_, innerType, _) => innerType.typeConstructor match {
+            case Some(TypeConstructor.Tuple(l)) => l
+            case Some(TypeConstructor.Unit) => 0
+            case _ => 1
+          }
+          case _ => throw InternalCompilerException(s"Unexpected non-foldable type: '${exp.tpe}'.", loc)
+        }
+
+        // Compute the symbol of the function.
+        val sym = Defs.ProjectInto(arity)
+
+        // The type of the function.
+        val defTpe = Type.mkPureUncurriedArrow(List(Types.PredSym, exp.tpe), Types.Datalog, loc)
+
+        // Put everything together.
+        val argExps = mkPredSym(pred) :: visitExp(exp) :: Nil
+        LoweredAst.Expr.ApplyDef(sym, argExps, defTpe, Types.Datalog, eff, loc)
+
+      case TypedAst.Expr.FixpointProject(pred, exp, tpe, eff, loc) =>
+        // Compute the arity of the predicate symbol.
+        // The type is either of the form `Array[(a, b, c)]` or `Array[a]`.
+        val arity = Type.eraseAliases(tpe) match {
+          case Type.Apply(Type.Cst(_, _), innerType, _) => innerType.typeConstructor match {
+            case Some(TypeConstructor.Tuple(_)) => innerType.typeArguments.length
+            case Some(TypeConstructor.Unit) => 0
+            case _ => 1
+          }
+          case _ => throw InternalCompilerException(s"Unexpected non-list type: '$tpe'.", loc)
+        }
+
+        // Compute the symbol of the function.
+        val sym = Defs.Facts(arity)
+
+        // The type of the function.
+        val defTpe = Type.mkPureUncurriedArrow(List(Types.PredSym, Types.Datalog), tpe, loc)
+
+        // Put everything together.
+        val argExps = mkPredSym(pred) :: visitExp(exp) :: Nil
+        LoweredAst.Expr.ApplyDef(sym, argExps, defTpe, tpe, eff, loc)
+
+      case TypedAst.Expr.Error(m, _, _) =>
+        throw InternalCompilerException(s"Unexpected error expression near", m.loc)
+
+    }
   }
 
   /**
@@ -1276,6 +1285,8 @@ class Lowering extends CompilerPlugin[TypedAst.Root, LoweredAst.Root] {
     * Returns a `Fixpoint/Ast/Datalog.BodyPredicate.GuardX`.
     */
   private def mkGuard(fvs: List[(Symbol.VarSym, Type)], exp: LoweredAst.Expr, loc: SourceLocation)(implicit scope: Scope, root: TypedAst.Root, flix: Flix): LoweredAst.Expr = {
+    implicit val genSym: GenSym = flix.genSym
+
     // Compute the number of free variables.
     val arity = fvs.length
 
@@ -1324,6 +1335,8 @@ class Lowering extends CompilerPlugin[TypedAst.Root, LoweredAst.Root] {
     * Returns a `Fixpoint/Ast/Datalog.BodyPredicate.Functional`.
     */
   private def mkFunctional(outVars: List[Symbol.VarSym], inVars: List[(Symbol.VarSym, Type)], exp: LoweredAst.Expr, loc: SourceLocation)(implicit root: TypedAst.Root, flix: Flix): LoweredAst.Expr = {
+    implicit val genSym: GenSym = flix.genSym
+
     // Compute the number of in and out variables.
     val numberOfInVars = inVars.length
     val numberOfOutVars = outVars.length
@@ -1372,6 +1385,8 @@ class Lowering extends CompilerPlugin[TypedAst.Root, LoweredAst.Root] {
     * Returns a `Fixpoint/Ast/Datalog.HeadTerm.AppX`.
     */
   private def mkAppTerm(fvs: List[(Symbol.VarSym, Type)], exp: LoweredAst.Expr, loc: SourceLocation)(implicit scope: Scope, root: TypedAst.Root, flix: Flix): LoweredAst.Expr = {
+    implicit val genSym: GenSym = flix.genSym
+
     // Compute the number of free variables.
     val arity = fvs.length
 
@@ -1651,6 +1666,8 @@ class Lowering extends CompilerPlugin[TypedAst.Root, LoweredAst.Root] {
     * This function is called `mkLetSym` to avoid confusion with [[mkVarSym]].
     */
   private def mkLetSym(prefix: String, loc: SourceLocation)(implicit scope: Scope, flix: Flix): Symbol.VarSym = {
+    implicit val genSym: GenSym = flix.genSym
+
     val name = prefix + Flix.Delimiter + flix.genSym.freshId()
     Symbol.freshVarSym(name, BoundBy.Let, loc)
   }

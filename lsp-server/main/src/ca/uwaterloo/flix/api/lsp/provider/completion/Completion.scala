@@ -225,7 +225,7 @@ sealed trait Completion {
         sortText            = Priority.toSortText(Priority.Lower, qualifiedName),
         filterText          = Some(CompletionUtils.getFilterTextForName(qualifiedName)),
         textEdit            = TextEdit(context.range, snippet),
-        detail              = Some(FormatScheme.formatScheme(decl.spec.declaredScheme)(flix)),
+        detail              = Some(FormatScheme.formatScheme(decl.spec.declaredScheme)(flix.getFormatOptions)),
         documentation       = Some(decl.spec.doc.text),
         insertTextFormat    = InsertTextFormat.Snippet,
         kind                = CompletionItemKind.Function,
@@ -299,7 +299,7 @@ sealed trait Completion {
         sortText         = Priority.toSortText(Priority.Lower, qualifiedName),
         filterText       = Some(CompletionUtils.getFilterTextForName(qualifiedName)),
         textEdit         = TextEdit(context.range, snippet),
-        detail           = Some(FormatScheme.formatScheme(decl.spec.declaredScheme)(flix)),
+        detail           = Some(FormatScheme.formatScheme(decl.spec.declaredScheme)(flix.getFormatOptions)),
         documentation    = Some(decl.spec.doc.text),
         insertTextFormat = InsertTextFormat.Snippet,
         kind             = CompletionItemKind.Function
@@ -317,7 +317,7 @@ sealed trait Completion {
         sortText         = Priority.toSortText(Priority.Lower, name),
         filterText       = Some(CompletionUtils.getFilterTextForName(name)),
         textEdit         = TextEdit(context.range, snippet),
-        detail           = Some(FormatScheme.formatScheme(decl.spec.declaredScheme)(flix)),
+        detail           = Some(FormatScheme.formatScheme(decl.spec.declaredScheme)(flix.getFormatOptions)),
         documentation    = Some(decl.spec.doc.text),
         insertTextFormat = InsertTextFormat.Snippet,
         kind             = CompletionItemKind.Interface
@@ -336,7 +336,7 @@ sealed trait Completion {
         sortText         = Priority.toSortText(Priority.Lower, name),
         filterText       = Some(CompletionUtils.getFilterTextForName(name)),
         textEdit         = TextEdit(context.range, snippet),
-        detail           = Some(FormatScheme.formatScheme(decl.spec.declaredScheme)(flix)),
+        detail           = Some(FormatScheme.formatScheme(decl.spec.declaredScheme)(flix.getFormatOptions)),
         documentation    = Some(decl.spec.doc.text),
         insertTextFormat = InsertTextFormat.Snippet,
         kind             = CompletionItemKind.Interface
@@ -454,7 +454,7 @@ sealed trait Completion {
         label    = field,
         sortText = Priority.toSortText(Priority.Lowest, field),
         textEdit = TextEdit(Range.from(loc), field),
-        detail   = Some(FormatType.formatType(tpe)(flix)),
+        detail   = Some(FormatType.formatType(tpe)(flix.getFormatOptions)),
         kind     = CompletionItemKind.Property,
       )
 
@@ -497,7 +497,7 @@ sealed trait Completion {
         filterText        = Some(s"${sym.text}?$name"),
         sortText          = priority,
         textEdit          = TextEdit(Range.from(loc), snippet),
-        detail            = Some(FormatScheme.formatScheme(decl.spec.declaredScheme)),
+        detail            = Some(FormatScheme.formatScheme(decl.spec.declaredScheme)(flix.getFormatOptions)),
         documentation     = Some(decl.spec.doc.text),
         insertTextFormat  = InsertTextFormat.Snippet,
         kind              = CompletionItemKind.Function)

@@ -661,7 +661,7 @@ class Bootstrap(val projectPath: Path, apiKey: Option[String]) {
 
     val (result, errors) = flix.check()
     if (errors.isEmpty) {
-      result.foreach(HtmlDocumentor.run(_, packageModules)(flix))
+      result.foreach(HtmlDocumentor.run(_, packageModules)(flix.getFormatOptions))
       Validation.Success(())
     } else {
       Validation.Failure(BootstrapError.GeneralError(flix.mkMessages(errors)))

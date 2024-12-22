@@ -19,7 +19,7 @@ import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.ast.NamedAst.Declaration.Def
 import ca.uwaterloo.flix.language.ast.{Type, TypeConstructor, TypedAst}
 import ca.uwaterloo.flix.language.ast.shared.{LocalScope, Resolution}
-import ca.uwaterloo.flix.language.fmt.FormatType
+import ca.uwaterloo.flix.language.fmt.{FormatType, FormatOptions}
 import ca.uwaterloo.flix.language.ast.Symbol
 import scala.annotation.tailrec
 
@@ -30,6 +30,8 @@ object CompletionUtils {
   private def isUnitFunction(fparams: List[TypedAst.FormalParam]): Boolean = fparams.length == 1 && isUnitType(fparams.head.tpe)
 
   def getParamsLabelForEnumTags(cas: TypedAst.Case)(implicit flix: Flix): String = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     cas.tpes.length match {
       case 0 => ""
       case _ => s"(${cas.tpes.map(FormatType.formatType(_)).mkString(", ")})"
@@ -38,23 +40,27 @@ object CompletionUtils {
 
   def getLabelForNameAndSpec(name: String, spec: TypedAst.Spec)(implicit flix: Flix): String = name + getLabelForSpec(spec)
 
-  def getLabelForSpec(spec: TypedAst.Spec)(implicit flix: Flix): String = spec match {
-    case TypedAst.Spec(_, _, _, _, fparams, _, retTpe0, eff0, _, _) =>
-      val args = if (isUnitFunction(fparams))
-        Nil
-      else
-        fparams.map {
-          fparam => s"${fparam.bnd.sym.text}: ${FormatType.formatType(fparam.tpe)}"
+  def getLabelForSpec(spec: TypedAst.Spec)(implicit flix: Flix): String = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
+    spec match {
+      case TypedAst.Spec(_, _, _, _, fparams, _, retTpe0, eff0, _, _) =>
+        val args = if (isUnitFunction(fparams))
+          Nil
+        else
+          fparams.map {
+            fparam => s"${fparam.bnd.sym.text}: ${FormatType.formatType(fparam.tpe)}"
+          }
+
+        val retTpe = FormatType.formatType(retTpe0)
+
+        val eff = eff0 match {
+          case Type.Cst(TypeConstructor.Pure, _) => ""
+          case p => raw" \ " + FormatType.formatType(p)
         }
 
-      val retTpe = FormatType.formatType(retTpe0)
-
-      val eff = eff0 match {
-        case Type.Cst(TypeConstructor.Pure, _) => ""
-        case p => raw" \ " + FormatType.formatType(p)
-      }
-
-      s"(${args.mkString(", ")}): $retTpe$eff"
+        s"(${args.mkString(", ")}): $retTpe$eff"
+    }
   }
 
   /**

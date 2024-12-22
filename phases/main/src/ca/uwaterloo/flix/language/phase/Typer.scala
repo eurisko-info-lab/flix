@@ -16,11 +16,12 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.{Flix, FlixEvent}
-import ca.uwaterloo.flix.language.CompilationMessage
+import ca.uwaterloo.flix.language.{CompilationMessage, GenSym}
 import ca.uwaterloo.flix.language.ast.*
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.dbg.AstPrinter.*
 import ca.uwaterloo.flix.language.errors.TypeError
+import ca.uwaterloo.flix.language.fmt.FormatOptions
 import ca.uwaterloo.flix.language.phase.typer.{ConstraintGen, ConstraintSolver, InfResult, TypeContext}
 import ca.uwaterloo.flix.language.phase.unification.{Substitution, TraitEnv}
 import ca.uwaterloo.flix.util.*
@@ -184,6 +185,8 @@ object Typer extends ValidWithCachePhasePlugin[KindedAst.Root, TypedAst.Root] {
     implicit val scope: Scope = Scope.Top
     implicit val r: KindedAst.Root = root
     implicit val context: TypeContext = new TypeContext
+    implicit val genSym: GenSym = flix.genSym
+
     val (tpe, eff0) = ConstraintGen.visitExp(defn.exp)
     val infRenv = context.getRigidityEnv
     val infTconstrs = context.getTypeConstraints
@@ -235,6 +238,8 @@ object Typer extends ValidWithCachePhasePlugin[KindedAst.Root, TypedAst.Root] {
     implicit val scope: Scope = Scope.Top
     implicit val r: KindedAst.Root = root
     implicit val context: TypeContext = new TypeContext
+    implicit val genSym: GenSym = flix.genSym
+
     sig.exp match {
       case None => TypeReconstruction.visitSig(sig, Substitution.empty)
       case Some(exp) =>
@@ -417,6 +422,9 @@ object Typer extends ValidWithCachePhasePlugin[KindedAst.Root, TypedAst.Root] {
     * Verifies that all the associated types in the spec are resolvable, according to the declared type constraints.
     */
   private def checkAssocTypes(spec0: KindedAst.Spec, extraTconstrs: List[TraitConstraint], tenv: TraitEnv)(implicit sctx: SharedContext, flix: Flix): Unit = {
+    implicit val genSym: GenSym = flix.genSym
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     def getAssocTypes(t: Type): List[Type.AssocType] = t match {
       case Type.Var(_, _) => Nil
       case Type.Cst(_, _) => Nil

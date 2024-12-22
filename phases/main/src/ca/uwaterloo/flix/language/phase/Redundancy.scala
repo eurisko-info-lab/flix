@@ -26,6 +26,7 @@ import ca.uwaterloo.flix.language.ast.{Name, SourceLocation, Symbol, Type, TypeC
 import ca.uwaterloo.flix.language.dbg.AstPrinter.*
 import ca.uwaterloo.flix.language.errors.RedundancyError
 import ca.uwaterloo.flix.language.errors.RedundancyError.*
+import ca.uwaterloo.flix.language.fmt.FormatOptions
 import ca.uwaterloo.flix.language.phase.unification.{TraitEnv, TraitEnvironment}
 import ca.uwaterloo.flix.util.ParOps
 
@@ -198,6 +199,8 @@ object Redundancy extends ValidPhasePlugin[Root, Root] {
     * Finds redundant trait constraints in `tconstrs`.
     */
   private def redundantTraitConstraints(tconstrs: List[TraitConstraint])(implicit root: Root, flix: Flix): List[RedundancyError] = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     for {
       (tconstr1, i1) <- tconstrs.zipWithIndex
       (tconstr2, i2) <- tconstrs.zipWithIndex
@@ -287,385 +290,388 @@ object Redundancy extends ValidPhasePlugin[Root, Root] {
   /**
     * Returns the symbols used in the given expression `e0` under the given environment `env0`.
     */
-  private def visitExp(e0: Expr, env0: Env, rc: RecursionContext)(implicit lctx: LocalContext, sctx: SharedContext, root: Root, flix: Flix): Used = e0 match {
-    case Expr.Cst(_, _, _) => Used.empty
+  private def visitExp(e0: Expr, env0: Env, rc: RecursionContext)(implicit lctx: LocalContext, sctx: SharedContext, root: Root, flix: Flix): Used = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
 
-    case Expr.Var(sym, _, loc) => (sym.isWild, rc.vars.contains(sym)) match {
-      // Case 1: Non-wild, non-recursive use of sym.
-      case (false, false) => Used.of(sym)
-      // Case 2: Non-wild, recursive use of sym. Does not count as a use.
-      case (false, true) => Used.empty
-      // Case 3: Wild, non-recursive use of sym.
-      case (true, false) => Used.empty + HiddenVarSym(sym, loc)
-      // Case 4: Wild, recursive use of sym.
-      case (true, true) => Used.empty + HiddenVarSym(sym, loc)
-    }
+    e0 match {
+      case Expr.Cst(_, _, _) => Used.empty
 
-    case Expr.Hole(sym, _, _, _) =>
-      lctx.holeSyms += sym
-      Used.empty
-
-    case Expr.HoleWithExp(exp, _, _, _) =>
-      visitExp(exp, env0, rc)
-
-    case Expr.OpenAs(_, exp, _, _) =>
-      visitExp(exp, env0, rc)
-
-    case Expr.Use(_, alias, exp, _) =>
-      // Check if the alias is shadowing
-      val shadowedName = shadowing(alias.name, alias.loc, env0)
-
-      // Add the name to the environment
-      val env = env0 + (alias.name -> alias.loc)
-
-      // Visit the expression with the extended environment
-      val innerUsed = visitExp(exp, env, rc)
-
-      // TODO NS-REFACTOR check for unused syms
-      innerUsed ++ shadowedName
-
-    case Expr.Lambda(fparam, exp, _, _) =>
-      // Extend the environment with the variable symbol.
-      val env1 = env0 + fparam.bnd.sym
-
-      // Visit the expression with the extended environment.
-      val innerUsed = visitExp(exp, env1, rc)
-
-      // Check if the formal parameter is shadowing.
-      val shadowedVar = shadowing(fparam.bnd.sym.text, fparam.bnd.sym.loc, env0)
-
-      // Check if the lambda parameter symbol is dead.
-      if (deadVarSym(fparam.bnd.sym, innerUsed))
-        innerUsed ++ shadowedVar - fparam.bnd.sym + UnusedFormalParam(fparam.bnd.sym)
-      else
-        innerUsed ++ shadowedVar - fparam.bnd.sym
-
-    case Expr.ApplyClo(exp1, exp2, _, _, _) =>
-      val us1 = visitExp(exp1, env0, rc)
-      val us2 = visitExp(exp2, env0, rc)
-      us1 ++ us2
-
-    case Expr.ApplyDef(DefSymUse(sym, _), exps, _, _, _, _) =>
-      // Recursive calls do not count as uses.
-      if (!rc.defn.contains(sym)) {
-        sctx.defSyms.put(sym, ())
-      }
-      visitExps(exps, env0, rc)
-
-    case Expr.ApplyLocalDef(LocalDefSymUse(sym, _), exps, _, _, _, _) =>
-      if (rc.vars.contains(sym)) {
-        visitExps(exps, env0, rc)
-      } else {
-        Used.of(sym) ++ visitExps(exps, env0, rc)
+      case Expr.Var(sym, _, loc) => (sym.isWild, rc.vars.contains(sym)) match {
+        // Case 1: Non-wild, non-recursive use of sym.
+        case (false, false) => Used.of(sym)
+        // Case 2: Non-wild, recursive use of sym. Does not count as a use.
+        case (false, true) => Used.empty
+        // Case 3: Wild, non-recursive use of sym.
+        case (true, false) => Used.empty + HiddenVarSym(sym, loc)
+        // Case 4: Wild, recursive use of sym.
+        case (true, true) => Used.empty + HiddenVarSym(sym, loc)
       }
 
-    case Expr.ApplySig(SigSymUse(sym, _), exps, _, _, _, _) =>
-      // Recursive calls do not count as uses.
-      if (!rc.defn.contains(sym)) {
-        sctx.sigSyms.put(sym, ())
-      }
-      visitExps(exps, env0, rc)
+      case Expr.Hole(sym, _, _, _) =>
+        lctx.holeSyms += sym
+        Used.empty
 
-    case Expr.Unary(_, exp, _, _, _) =>
-      visitExp(exp, env0, rc)
+      case Expr.HoleWithExp(exp, _, _, _) =>
+        visitExp(exp, env0, rc)
 
-    case Expr.Binary(_, exp1, exp2, _, _, _) =>
-      val us1 = visitExp(exp1, env0, rc)
-      val us2 = visitExp(exp2, env0, rc)
-      us1 ++ us2
+      case Expr.OpenAs(_, exp, _, _) =>
+        visitExp(exp, env0, rc)
 
-    case Expr.Let(Binder(sym, _), exp1, exp2, _, _, _) =>
-      // Extend the environment with the variable symbol.
-      val env1 = env0 + sym
+      case Expr.Use(_, alias, exp, _) =>
+        // Check if the alias is shadowing
+        val shadowedName = shadowing(alias.name, alias.loc, env0)
 
-      // Visit the two expressions one under the original environment and one under the extended environment.
-      val innerUsed1 = visitExp(exp1, env0, rc)
-      val innerUsed2 = visitExp(exp2, env1, rc)
+        // Add the name to the environment
+        val env = env0 + (alias.name -> alias.loc)
 
-      // Check for shadowing.
-      val shadowedVar = shadowing(sym.text, sym.loc, env0)
+        // Visit the expression with the extended environment
+        val innerUsed = visitExp(exp, env, rc)
 
-      // Check if the let-bound variable symbol is dead in exp2.
-      if (deadVarSym(sym, innerUsed2))
-        (innerUsed1 ++ innerUsed2 ++ shadowedVar) - sym + UnusedVarSym(sym)
-      else
-        (innerUsed1 ++ innerUsed2 ++ shadowedVar) - sym
+        // TODO NS-REFACTOR check for unused syms
+        innerUsed ++ shadowedName
 
-    case Expr.LocalDef(Binder(sym, _), fparams, exp1, exp2, _, _, _) =>
-      // Extend the environment with the variable symbol.
-      val env1 = env0 + sym
+      case Expr.Lambda(fparam, exp, _, _) =>
+        // Extend the environment with the variable symbol.
+        val env1 = env0 + fparam.bnd.sym
 
-      // Visit the two expressions under the extended environment.
-      // Also add fparams to env1 in the first expression.
-      // Add the variable to the recursion context only in the first expression.
-      val innerUsed1 = visitExp(exp1, env1 ++ fparams.map(_.bnd.sym), rc.withVar(sym))
-      val innerUsed2 = visitExp(exp2, env1, rc)
-      val used = innerUsed1 ++ innerUsed2
+        // Visit the expression with the extended environment.
+        val innerUsed = visitExp(exp, env1, rc)
 
-      // Check for shadowing.
-      // Check if the LocalDef variable symbol is dead in exp1 + exp2.
-      val shadowedVar = shadowing(sym.text, sym.loc, env0)
-      val res1 = if (deadVarSym(sym, used))
-        (used ++ shadowedVar) - sym + UnusedVarSym(sym)
-      else
-        (used ++ shadowedVar) - sym
+        // Check if the formal parameter is shadowing.
+        val shadowedVar = shadowing(fparam.bnd.sym.text, fparam.bnd.sym.loc, env0)
 
-      // Check if the fparams are dead in exp1
-      val fparamVars = fparams.map(_.bnd.sym)
-      val shadowedFparamVars = fparamVars.map(s => shadowing(s.text, s.loc, env0))
+        // Check if the lambda parameter symbol is dead.
+        if (deadVarSym(fparam.bnd.sym, innerUsed))
+          innerUsed ++ shadowedVar - fparam.bnd.sym + UnusedFormalParam(fparam.bnd.sym)
+        else
+          innerUsed ++ shadowedVar - fparam.bnd.sym
 
-      fparamVars.zip(shadowedFparamVars).foldLeft(res1) {
-        case (acc, (s, shadow)) if deadVarSym(s, innerUsed1) => (acc ++ shadow) - s + UnusedVarSym(s)
-        case (acc, (s, shadow)) => (acc ++ shadow) - s
-      }
-
-    case Expr.Region(_, _) =>
-      Used.empty
-
-    case Expr.Scope(Binder(sym, _), _, exp, _, _, _) =>
-      // Extend the environment with the variable symbol.
-      val env1 = env0 + sym
-
-      // Visit the expression under the extended environment.
-      val innerUsed = visitExp(exp, env1, rc)
-
-      // Check for shadowing.
-      val shadowedVar = shadowing(sym.text, sym.loc, env0)
-
-      // Check if the let-bound variable symbol is dead in exp.
-      if (deadVarSym(sym, innerUsed))
-        (innerUsed ++ shadowedVar) - sym + UnusedVarSym(sym)
-      else
-        (innerUsed ++ shadowedVar) - sym
-
-    case Expr.IfThenElse(exp1, exp2, exp3, _, _, _) =>
-      val us1 = visitExp(exp1, env0, rc)
-      val us2 = visitExp(exp2, env0, rc)
-      val us3 = visitExp(exp3, env0, rc)
-      us1 ++ us2 ++ us3
-
-    case Expr.Stm(exp1, exp2, _, _, _) =>
-      val us1 = visitExp(exp1, env0, rc)
-      val us2 = visitExp(exp2, env0, rc)
-
-      // Check for useless pure expressions.
-      if (isUnderAppliedFunction(exp1)) {
-        // `isUnderAppliedFunction` implies `isUselessExpression` so this must be checked first.
-        (us1 ++ us2) + UnderAppliedFunction(exp1.tpe, exp1.loc)
-      } else if (isUselessExpression(exp1)) {
-        (us1 ++ us2) + UselessExpression(exp1.tpe, exp1.loc)
-      } else if (isMustUse(exp1)(root) && !isHole(exp1)) {
-        (us1 ++ us2) + UnusedMustUseValue(exp1.tpe, exp1.loc)
-      } else {
+      case Expr.ApplyClo(exp1, exp2, _, _, _) =>
+        val us1 = visitExp(exp1, env0, rc)
+        val us2 = visitExp(exp2, env0, rc)
         us1 ++ us2
-      }
 
-    case Expr.Discard(exp, _, _) =>
-      val us = visitExp(exp, env0, rc)
+      case Expr.ApplyDef(DefSymUse(sym, _), exps, _, _, _, _) =>
+        // Recursive calls do not count as uses.
+        if (!rc.defn.contains(sym)) {
+          sctx.defSyms.put(sym, ())
+        }
+        visitExps(exps, env0, rc)
 
-      if (isPure(exp))
-        us + DiscardedPureValue(exp.loc)
-      else if (exp.tpe == Type.Unit)
-        us + RedundantDiscard(exp.loc)
-      else
+      case Expr.ApplyLocalDef(LocalDefSymUse(sym, _), exps, _, _, _, _) =>
+        if (rc.vars.contains(sym)) {
+          visitExps(exps, env0, rc)
+        } else {
+          Used.of(sym) ++ visitExps(exps, env0, rc)
+        }
+
+      case Expr.ApplySig(SigSymUse(sym, _), exps, _, _, _, _) =>
+        // Recursive calls do not count as uses.
+        if (!rc.defn.contains(sym)) {
+          sctx.sigSyms.put(sym, ())
+        }
+        visitExps(exps, env0, rc)
+
+      case Expr.Unary(_, exp, _, _, _) =>
+        visitExp(exp, env0, rc)
+
+      case Expr.Binary(_, exp1, exp2, _, _, _) =>
+        val us1 = visitExp(exp1, env0, rc)
+        val us2 = visitExp(exp2, env0, rc)
+        us1 ++ us2
+
+      case Expr.Let(Binder(sym, _), exp1, exp2, _, _, _) =>
+        // Extend the environment with the variable symbol.
+        val env1 = env0 + sym
+
+        // Visit the two expressions one under the original environment and one under the extended environment.
+        val innerUsed1 = visitExp(exp1, env0, rc)
+        val innerUsed2 = visitExp(exp2, env1, rc)
+
+        // Check for shadowing.
+        val shadowedVar = shadowing(sym.text, sym.loc, env0)
+
+        // Check if the let-bound variable symbol is dead in exp2.
+        if (deadVarSym(sym, innerUsed2))
+          (innerUsed1 ++ innerUsed2 ++ shadowedVar) - sym + UnusedVarSym(sym)
+        else
+          (innerUsed1 ++ innerUsed2 ++ shadowedVar) - sym
+
+      case Expr.LocalDef(Binder(sym, _), fparams, exp1, exp2, _, _, _) =>
+        // Extend the environment with the variable symbol.
+        val env1 = env0 + sym
+
+        // Visit the two expressions under the extended environment.
+        // Also add fparams to env1 in the first expression.
+        // Add the variable to the recursion context only in the first expression.
+        val innerUsed1 = visitExp(exp1, env1 ++ fparams.map(_.bnd.sym), rc.withVar(sym))
+        val innerUsed2 = visitExp(exp2, env1, rc)
+        val used = innerUsed1 ++ innerUsed2
+
+        // Check for shadowing.
+        // Check if the LocalDef variable symbol is dead in exp1 + exp2.
+        val shadowedVar = shadowing(sym.text, sym.loc, env0)
+        val res1 = if (deadVarSym(sym, used))
+          (used ++ shadowedVar) - sym + UnusedVarSym(sym)
+        else
+          (used ++ shadowedVar) - sym
+
+        // Check if the fparams are dead in exp1
+        val fparamVars = fparams.map(_.bnd.sym)
+        val shadowedFparamVars = fparamVars.map(s => shadowing(s.text, s.loc, env0))
+
+        fparamVars.zip(shadowedFparamVars).foldLeft(res1) {
+          case (acc, (s, shadow)) if deadVarSym(s, innerUsed1) => (acc ++ shadow) - s + UnusedVarSym(s)
+          case (acc, (s, shadow)) => (acc ++ shadow) - s
+        }
+
+      case Expr.Region(_, _) =>
+        Used.empty
+
+      case Expr.Scope(Binder(sym, _), _, exp, _, _, _) =>
+        // Extend the environment with the variable symbol.
+        val env1 = env0 + sym
+
+        // Visit the expression under the extended environment.
+        val innerUsed = visitExp(exp, env1, rc)
+
+        // Check for shadowing.
+        val shadowedVar = shadowing(sym.text, sym.loc, env0)
+
+        // Check if the let-bound variable symbol is dead in exp.
+        if (deadVarSym(sym, innerUsed))
+          (innerUsed ++ shadowedVar) - sym + UnusedVarSym(sym)
+        else
+          (innerUsed ++ shadowedVar) - sym
+
+      case Expr.IfThenElse(exp1, exp2, exp3, _, _, _) =>
+        val us1 = visitExp(exp1, env0, rc)
+        val us2 = visitExp(exp2, env0, rc)
+        val us3 = visitExp(exp3, env0, rc)
+        us1 ++ us2 ++ us3
+
+      case Expr.Stm(exp1, exp2, _, _, _) =>
+        val us1 = visitExp(exp1, env0, rc)
+        val us2 = visitExp(exp2, env0, rc)
+
+        // Check for useless pure expressions.
+        if (isUnderAppliedFunction(exp1)) {
+          // `isUnderAppliedFunction` implies `isUselessExpression` so this must be checked first.
+          (us1 ++ us2) + UnderAppliedFunction(exp1.tpe, exp1.loc)
+        } else if (isUselessExpression(exp1)) {
+          (us1 ++ us2) + UselessExpression(exp1.tpe, exp1.loc)
+        } else if (isMustUse(exp1)(root) && !isHole(exp1)) {
+          (us1 ++ us2) + UnusedMustUseValue(exp1.tpe, exp1.loc)
+        } else {
+          us1 ++ us2
+        }
+
+      case Expr.Discard(exp, _, _) =>
+        val us = visitExp(exp, env0, rc)
+
+        if (isPure(exp))
+          us + DiscardedPureValue(exp.loc)
+        else if (exp.tpe == Type.Unit)
+          us + RedundantDiscard(exp.loc)
+        else
+          us
+
+      case Expr.Match(exp, rules, _, _, _) =>
+        // Visit the match expression.
+        val usedMatch = visitExp(exp, env0, rc)
+
+        // Visit each match rule.
+        val usedRules = rules map {
+          case MatchRule(pat, guard, body) =>
+            // Compute the free variables in the pattern.
+            val fvs = freeVars(pat)
+
+            // Extend the environment with the free variables.
+            val extendedEnv = env0 ++ fvs
+
+            // Visit the pattern, guard and body.
+            val usedPat = visitPat(pat)
+            val usedGuard = guard.map(visitExp(_, extendedEnv, rc)).getOrElse(Used.empty)
+            val usedBody = visitExp(body, extendedEnv, rc)
+            val usedPatGuardAndBody = usedPat ++ usedGuard ++ usedBody
+
+            // Check for unused variable symbols.
+            val unusedVarSyms = findUnusedVarSyms(fvs, usedPatGuardAndBody)
+
+            // Check for shadowed variable symbols.
+            val shadowedVarSyms = findShadowedVarSyms(fvs, env0)
+
+            // Combine everything together.
+            (usedPatGuardAndBody -- fvs) ++ unusedVarSyms ++ shadowedVarSyms
+        }
+
+        usedMatch ++ usedRules.reduceLeft(_ ++ _)
+
+      case Expr.TypeMatch(exp, rules, _, _, _) =>
+        // Visit the match expression.
+        val usedMatch = visitExp(exp, env0, rc)
+
+        // Visit each match rule.
+        val usedRules = rules map {
+          case TypeMatchRule(bnd, _, body) =>
+            // Get the free var from the sym
+            val fvs = Set(bnd.sym)
+
+            // Extend the environment with the free variables.
+            val extendedEnv = env0 ++ fvs
+
+            // Visit the pattern, guard and body.
+            val usedBody = visitExp(body, extendedEnv, rc)
+
+            // Check for unused variable symbols.
+            val unusedVarSyms = findUnusedVarSyms(fvs, usedBody)
+
+            // Check for shadowed variable symbols.
+            val shadowedVarSyms = findShadowedVarSyms(fvs, env0)
+
+            // Combine everything together.
+            (usedBody -- fvs) ++ unusedVarSyms ++ shadowedVarSyms
+        }
+
+        usedMatch ++ usedRules.reduceLeft(_ ++ _)
+
+      case Expr.RestrictableChoose(_, exp, rules, _, _, _) =>
+        // Visit the match expression.
+        val usedMatch = visitExp(exp, env0, rc)
+
+        // Visit each match rule.
+        val usedRules = rules map {
+          case RestrictableChooseRule(pat, body) =>
+            // Compute the free variables in the pattern.
+            val fvs = freeVars(pat)
+
+            // Extend the environment with the free variables.
+            val extendedEnv = env0 ++ fvs
+
+            // Visit the pattern, guard and body.
+            val usedPat = Used.empty
+            val usedBody = visitExp(body, extendedEnv, rc)
+            val usedPatAndBody = usedPat ++ usedBody
+
+            // Check for unused variable symbols.
+            val unusedVarSyms = findUnusedVarSyms(fvs, usedPatAndBody)
+
+            // Check for shadowed variable symbols.
+            val shadowedVarSyms = findShadowedVarSyms(fvs, env0)
+
+            // Combine everything together.
+            (usedPatAndBody -- fvs) ++ unusedVarSyms ++ shadowedVarSyms
+        }
+
+        usedMatch ++ usedRules.reduceLeft(_ ++ _)
+
+
+      case Expr.Tag(CaseSymUse(sym, _), exps, _, _, _) =>
+        val us = visitExps(exps, env0, rc)
+        sctx.enumSyms.put(sym.enumSym, ())
+        sctx.caseSyms.put(sym, ())
         us
 
-    case Expr.Match(exp, rules, _, _, _) =>
-      // Visit the match expression.
-      val usedMatch = visitExp(exp, env0, rc)
+      case Expr.RestrictableTag(_, exps, _, _, _) =>
+        visitExps(exps, env0, rc)
 
-      // Visit each match rule.
-      val usedRules = rules map {
-        case MatchRule(pat, guard, body) =>
-          // Compute the free variables in the pattern.
-          val fvs = freeVars(pat)
+      case Expr.Tuple(elms, _, _, _) =>
+        visitExps(elms, env0, rc)
 
-          // Extend the environment with the free variables.
-          val extendedEnv = env0 ++ fvs
+      case Expr.RecordEmpty(_, _) =>
+        Used.empty
 
-          // Visit the pattern, guard and body.
-          val usedPat = visitPat(pat)
-          val usedGuard = guard.map(visitExp(_, extendedEnv, rc)).getOrElse(Used.empty)
-          val usedBody = visitExp(body, extendedEnv, rc)
-          val usedPatGuardAndBody = usedPat ++ usedGuard ++ usedBody
+      case Expr.RecordSelect(exp, _, _, _, _) =>
+        visitExp(exp, env0, rc)
 
-          // Check for unused variable symbols.
-          val unusedVarSyms = findUnusedVarSyms(fvs, usedPatGuardAndBody)
+      case Expr.RecordExtend(_, value, rest, _, _, _) =>
+        val us1 = visitExp(value, env0, rc)
+        val us2 = visitExp(rest, env0, rc)
+        us1 ++ us2
 
-          // Check for shadowed variable symbols.
-          val shadowedVarSyms = findShadowedVarSyms(fvs, env0)
+      case Expr.RecordRestrict(_, rest, _, _, _) =>
+        visitExp(rest, env0, rc)
 
-          // Combine everything together.
-          (usedPatGuardAndBody -- fvs) ++ unusedVarSyms ++ shadowedVarSyms
-      }
+      case Expr.ArrayLit(exps, exp, _, _, _) =>
+        visitExps(exps, env0, rc) ++ visitExp(exp, env0, rc)
 
-      usedMatch ++ usedRules.reduceLeft(_ ++ _)
+      case Expr.ArrayNew(exp1, exp2, exp3, _, _, _) =>
+        val us1 = visitExp(exp1, env0, rc)
+        val us2 = visitExp(exp2, env0, rc)
+        val us3 = visitExp(exp3, env0, rc)
+        us1 ++ us2 ++ us3
 
-    case Expr.TypeMatch(exp, rules, _, _, _) =>
-      // Visit the match expression.
-      val usedMatch = visitExp(exp, env0, rc)
+      case Expr.ArrayLoad(base, index, _, _, _) =>
+        val us1 = visitExp(base, env0, rc)
+        val us2 = visitExp(index, env0, rc)
+        us1 ++ us2
 
-      // Visit each match rule.
-      val usedRules = rules map {
-        case TypeMatchRule(bnd, _, body) =>
-          // Get the free var from the sym
-          val fvs = Set(bnd.sym)
+      case Expr.ArrayLength(base, _, _) =>
+        visitExp(base, env0, rc)
 
-          // Extend the environment with the free variables.
-          val extendedEnv = env0 ++ fvs
+      case Expr.ArrayStore(base, index, elm, _, _) =>
+        val us1 = visitExp(base, env0, rc)
+        val us2 = visitExp(index, env0, rc)
+        val us3 = visitExp(elm, env0, rc)
+        us1 ++ us2 ++ us3
 
-          // Visit the pattern, guard and body.
-          val usedBody = visitExp(body, extendedEnv, rc)
+      case Expr.StructNew(sym, fields, region, _, _, _) =>
+        sctx.structSyms.put(sym, ())
+        visitExps(fields.map { case (_, v) => v }, env0, rc) ++ visitExp(region, env0, rc)
 
-          // Check for unused variable symbols.
-          val unusedVarSyms = findUnusedVarSyms(fvs, usedBody)
+      case Expr.StructGet(e, field, _, _, _) =>
+        sctx.structFieldSyms.put(field.sym, ())
+        visitExp(e, env0, rc)
 
-          // Check for shadowed variable symbols.
-          val shadowedVarSyms = findShadowedVarSyms(fvs, env0)
+      case Expr.StructPut(e1, field, e2, _, _, _) =>
+        sctx.structFieldSyms.put(field.sym, ())
+        visitExp(e1, env0, rc) ++ visitExp(e2, env0, rc)
 
-          // Combine everything together.
-          (usedBody -- fvs) ++ unusedVarSyms ++ shadowedVarSyms
-      }
+      case Expr.VectorLit(exps, _, _, _) =>
+        visitExps(exps, env0, rc)
 
-      usedMatch ++ usedRules.reduceLeft(_ ++ _)
+      case Expr.VectorLoad(exp1, exp2, _, _, _) =>
+        val us1 = visitExp(exp1, env0, rc)
+        val us2 = visitExp(exp2, env0, rc)
+        us1 ++ us2
 
-    case Expr.RestrictableChoose(_, exp, rules, _, _, _) =>
-      // Visit the match expression.
-      val usedMatch = visitExp(exp, env0, rc)
+      case Expr.VectorLength(exp, _) =>
+        visitExp(exp, env0, rc)
 
-      // Visit each match rule.
-      val usedRules = rules map {
-        case RestrictableChooseRule(pat, body) =>
-          // Compute the free variables in the pattern.
-          val fvs = freeVars(pat)
+      case Expr.Ascribe(exp, _, _, _) =>
+        visitExp(exp, env0, rc)
 
-          // Extend the environment with the free variables.
-          val extendedEnv = env0 ++ fvs
+      case Expr.InstanceOf(exp, _, _) =>
+        visitExp(exp, env0, rc)
 
-          // Visit the pattern, guard and body.
-          val usedPat = Used.empty
-          val usedBody = visitExp(body, extendedEnv, rc)
-          val usedPatAndBody = usedPat ++ usedBody
+      case Expr.CheckedCast(cast, exp, tpe, eff, loc) =>
+        cast match {
+          case CheckedCastType.TypeCast =>
+            if (exp.tpe == tpe)
+              visitExp(exp, env0, rc) + RedundantCheckedTypeCast(loc)
+            else
+              visitExp(exp, env0, rc)
+          case CheckedCastType.EffectCast =>
+            if (exp.eff == eff && flix.options.xsubeffecting.isEmpty)
+              visitExp(exp, env0, rc) + RedundantCheckedEffectCast(loc)
+            else
+              visitExp(exp, env0, rc)
+        }
 
-          // Check for unused variable symbols.
-          val unusedVarSyms = findUnusedVarSyms(fvs, usedPatAndBody)
-
-          // Check for shadowed variable symbols.
-          val shadowedVarSyms = findShadowedVarSyms(fvs, env0)
-
-          // Combine everything together.
-          (usedPatAndBody -- fvs) ++ unusedVarSyms ++ shadowedVarSyms
-      }
-
-      usedMatch ++ usedRules.reduceLeft(_ ++ _)
-
-
-    case Expr.Tag(CaseSymUse(sym, _), exps, _, _, _) =>
-      val us = visitExps(exps, env0, rc)
-      sctx.enumSyms.put(sym.enumSym, ())
-      sctx.caseSyms.put(sym, ())
-      us
-
-    case Expr.RestrictableTag(_, exps, _, _, _) =>
-      visitExps(exps, env0, rc)
-
-    case Expr.Tuple(elms, _, _, _) =>
-      visitExps(elms, env0, rc)
-
-    case Expr.RecordEmpty(_, _) =>
-      Used.empty
-
-    case Expr.RecordSelect(exp, _, _, _, _) =>
-      visitExp(exp, env0, rc)
-
-    case Expr.RecordExtend(_, value, rest, _, _, _) =>
-      val us1 = visitExp(value, env0, rc)
-      val us2 = visitExp(rest, env0, rc)
-      us1 ++ us2
-
-    case Expr.RecordRestrict(_, rest, _, _, _) =>
-      visitExp(rest, env0, rc)
-
-    case Expr.ArrayLit(exps, exp, _, _, _) =>
-      visitExps(exps, env0, rc) ++ visitExp(exp, env0, rc)
-
-    case Expr.ArrayNew(exp1, exp2, exp3, _, _, _) =>
-      val us1 = visitExp(exp1, env0, rc)
-      val us2 = visitExp(exp2, env0, rc)
-      val us3 = visitExp(exp3, env0, rc)
-      us1 ++ us2 ++ us3
-
-    case Expr.ArrayLoad(base, index, _, _, _) =>
-      val us1 = visitExp(base, env0, rc)
-      val us2 = visitExp(index, env0, rc)
-      us1 ++ us2
-
-    case Expr.ArrayLength(base, _, _) =>
-      visitExp(base, env0, rc)
-
-    case Expr.ArrayStore(base, index, elm, _, _) =>
-      val us1 = visitExp(base, env0, rc)
-      val us2 = visitExp(index, env0, rc)
-      val us3 = visitExp(elm, env0, rc)
-      us1 ++ us2 ++ us3
-
-    case Expr.StructNew(sym, fields, region, _, _, _) =>
-      sctx.structSyms.put(sym, ())
-      visitExps(fields.map { case (_, v) => v }, env0, rc) ++ visitExp(region, env0, rc)
-
-    case Expr.StructGet(e, field, _, _, _) =>
-      sctx.structFieldSyms.put(field.sym, ())
-      visitExp(e, env0, rc)
-
-    case Expr.StructPut(e1, field, e2, _, _, _) =>
-      sctx.structFieldSyms.put(field.sym, ())
-      visitExp(e1, env0, rc) ++ visitExp(e2, env0, rc)
-
-    case Expr.VectorLit(exps, _, _, _) =>
-      visitExps(exps, env0, rc)
-
-    case Expr.VectorLoad(exp1, exp2, _, _, _) =>
-      val us1 = visitExp(exp1, env0, rc)
-      val us2 = visitExp(exp2, env0, rc)
-      us1 ++ us2
-
-    case Expr.VectorLength(exp, _) =>
-      visitExp(exp, env0, rc)
-
-    case Expr.Ascribe(exp, _, _, _) =>
-      visitExp(exp, env0, rc)
-
-    case Expr.InstanceOf(exp, _, _) =>
-      visitExp(exp, env0, rc)
-
-    case Expr.CheckedCast(cast, exp, tpe, eff, loc) =>
-      cast match {
-        case CheckedCastType.TypeCast =>
-          if (exp.tpe == tpe)
-            visitExp(exp, env0, rc) + RedundantCheckedTypeCast(loc)
-          else
-            visitExp(exp, env0, rc)
-        case CheckedCastType.EffectCast =>
-          if (exp.eff == eff && flix.options.xsubeffecting.isEmpty)
-            visitExp(exp, env0, rc) + RedundantCheckedEffectCast(loc)
-          else
-            visitExp(exp, env0, rc)
-      }
-
-    case Expr.UncheckedCast(exp, _, declaredEff, _, _, loc) =>
-      declaredEff match {
-        // Don't capture redundant purity casts if there's also a set effect
-        case Some(eff) =>
-          (eff, exp.eff) match {
-            case (Type.Pure, Type.Pure) =>
-              visitExp(exp, env0, rc) + RedundantUncheckedEffectCast(loc)
-            case (Type.Var(eff1, _), Type.Var(eff2, _))
-              if eff1 == eff2 =>
-              visitExp(exp, env0, rc) + RedundantUncheckedEffectCast(loc)
-            case _ => visitExp(exp, env0, rc)
-          }
-        case _ => visitExp(exp, env0, rc)
-      }
+      case Expr.UncheckedCast(exp, _, declaredEff, _, _, loc) =>
+        declaredEff match {
+          // Don't capture redundant purity casts if there's also a set effect
+          case Some(eff) =>
+            (eff, exp.eff) match {
+              case (Type.Pure, Type.Pure) =>
+                visitExp(exp, env0, rc) + RedundantUncheckedEffectCast(loc)
+              case (Type.Var(eff1, _), Type.Var(eff2, _))
+                if eff1 == eff2 =>
+                visitExp(exp, env0, rc) + RedundantUncheckedEffectCast(loc)
+              case _ => visitExp(exp, env0, rc)
+            }
+          case _ => visitExp(exp, env0, rc)
+        }
 
     case Expr.Unsafe(exp, runEff, _, _, loc) =>
       (runEff, exp.eff) match {
@@ -678,153 +684,154 @@ object Redundancy extends ValidPhasePlugin[Root, Root] {
       sctx.effSyms.put(effUse.sym, ())
       visitExp(exp, env0, rc)
 
-    case Expr.TryCatch(exp, rules, _, _, _) =>
-      val usedExp = visitExp(exp, env0, rc)
-      val usedRules = rules.foldLeft(Used.empty) {
-        case (acc, CatchRule(bnd, _, body)) =>
-          val usedBody = visitExp(body, env0, rc)
-          if (deadVarSym(bnd.sym, usedBody))
-            acc ++ usedBody + UnusedVarSym(bnd.sym)
-          else
-            acc ++ usedBody
-      }
-      usedExp ++ usedRules
+      case Expr.TryCatch(exp, rules, _, _, _) =>
+        val usedExp = visitExp(exp, env0, rc)
+        val usedRules = rules.foldLeft(Used.empty) {
+          case (acc, CatchRule(bnd, _, body)) =>
+            val usedBody = visitExp(body, env0, rc)
+            if (deadVarSym(bnd.sym, usedBody))
+              acc ++ usedBody + UnusedVarSym(bnd.sym)
+            else
+              acc ++ usedBody
+        }
+        usedExp ++ usedRules
 
-    case Expr.Throw(exp, _, _, _) =>
-      visitExp(exp, env0, rc)
+      case Expr.Throw(exp, _, _, _) =>
+        visitExp(exp, env0, rc)
 
-    case Expr.TryWith(exp, effUse, rules, _, _, _) =>
-      sctx.effSyms.put(effUse.sym, ())
-      val usedExp = visitExp(exp, env0, rc)
-      val usedRules = rules.foldLeft(Used.empty) {
-        case (acc, HandlerRule(_, fparams, body)) =>
-          val usedBody = visitExp(body, env0, rc)
-          val syms = fparams.map(_.bnd.sym)
-          val dead = syms.filter(deadVarSym(_, usedBody))
-          acc ++ usedBody ++ dead.map(UnusedVarSym.apply)
-      }
-      usedExp ++ usedRules
+      case Expr.TryWith(exp, effUse, rules, _, _, _) =>
+        sctx.effSyms.put(effUse.sym, ())
+        val usedExp = visitExp(exp, env0, rc)
+        val usedRules = rules.foldLeft(Used.empty) {
+          case (acc, HandlerRule(_, fparams, body)) =>
+            val usedBody = visitExp(body, env0, rc)
+            val syms = fparams.map(_.bnd.sym)
+            val dead = syms.filter(deadVarSym(_, usedBody))
+            acc ++ usedBody ++ dead.map(UnusedVarSym.apply)
+        }
+        usedExp ++ usedRules
 
-    case Expr.Do(opUse, exps, _, _, _) =>
-      sctx.effSyms.put(opUse.sym.eff, ())
-      visitExps(exps, env0, rc)
+      case Expr.Do(opUse, exps, _, _, _) =>
+        sctx.effSyms.put(opUse.sym.eff, ())
+        visitExps(exps, env0, rc)
 
-    case Expr.InvokeConstructor(_, args, _, _, _) =>
-      visitExps(args, env0, rc)
+      case Expr.InvokeConstructor(_, args, _, _, _) =>
+        visitExps(args, env0, rc)
 
-    case Expr.InvokeMethod(_, exp, args, _, _, _) =>
-      visitExp(exp, env0, rc) ++ visitExps(args, env0, rc)
+      case Expr.InvokeMethod(_, exp, args, _, _, _) =>
+        visitExp(exp, env0, rc) ++ visitExps(args, env0, rc)
 
-    case Expr.InvokeStaticMethod(_, args, _, _, _) =>
-      visitExps(args, env0, rc)
+      case Expr.InvokeStaticMethod(_, args, _, _, _) =>
+        visitExps(args, env0, rc)
 
-    case Expr.GetField(_, exp, _, _, _) =>
-      visitExp(exp, env0, rc)
+      case Expr.GetField(_, exp, _, _, _) =>
+        visitExp(exp, env0, rc)
 
-    case Expr.PutField(_, exp1, exp2, _, _, _) =>
-      visitExp(exp1, env0, rc) ++ visitExp(exp2, env0, rc)
+      case Expr.PutField(_, exp1, exp2, _, _, _) =>
+        visitExp(exp1, env0, rc) ++ visitExp(exp2, env0, rc)
 
-    case Expr.GetStaticField(_, _, _, _) =>
-      Used.empty
+      case Expr.GetStaticField(_, _, _, _) =>
+        Used.empty
 
-    case Expr.PutStaticField(_, exp, _, _, _) =>
-      visitExp(exp, env0, rc)
+      case Expr.PutStaticField(_, exp, _, _, _) =>
+        visitExp(exp, env0, rc)
 
-    case Expr.NewObject(_, _, _, _, methods, _) =>
-      methods.foldLeft(Used.empty) {
-        case (acc, JvmMethod(_, fparams, exp, _, _, _)) =>
-          // Extend the environment with the formal parameter symbols
-          val env1 = env0 ++ fparams.map(_.bnd.sym)
-          val used = visitExp(exp, env1, rc)
-          val unusedFParams = findUnusedFormalParameters(fparams, used)
-          acc ++ used ++ unusedFParams
-      }
+      case Expr.NewObject(_, _, _, _, methods, _) =>
+        methods.foldLeft(Used.empty) {
+          case (acc, JvmMethod(_, fparams, exp, _, _, _)) =>
+            // Extend the environment with the formal parameter symbols
+            val env1 = env0 ++ fparams.map(_.bnd.sym)
+            val used = visitExp(exp, env1, rc)
+            val unusedFParams = findUnusedFormalParameters(fparams, used)
+            acc ++ used ++ unusedFParams
+        }
 
-    case Expr.NewChannel(exp, _, _, _) =>
-      visitExp(exp, env0, rc)
+      case Expr.NewChannel(exp, _, _, _) =>
+        visitExp(exp, env0, rc)
 
-    case Expr.GetChannel(exp, _, _, _) =>
-      visitExp(exp, env0, rc)
+      case Expr.GetChannel(exp, _, _, _) =>
+        visitExp(exp, env0, rc)
 
-    case Expr.PutChannel(exp1, exp2, _, _, _) =>
-      val us1 = visitExp(exp1, env0, rc)
-      val us2 = visitExp(exp2, env0, rc)
-      us1 ++ us2
+      case Expr.PutChannel(exp1, exp2, _, _, _) =>
+        val us1 = visitExp(exp1, env0, rc)
+        val us2 = visitExp(exp2, env0, rc)
+        us1 ++ us2
 
-    case Expr.SelectChannel(rules, defaultOpt, _, _, _) =>
-      val defaultUsed = defaultOpt match {
-        case None => Used.empty
-        case Some(default) => visitExp(default, env0, rc)
-      }
+      case Expr.SelectChannel(rules, defaultOpt, _, _, _) =>
+        val defaultUsed = defaultOpt match {
+          case None => Used.empty
+          case Some(default) => visitExp(default, env0, rc)
+        }
 
-      val rulesUsed = rules map {
-        case SelectChannelRule(Binder(sym, _), chan, body) =>
-          // Extend the environment with the symbol.
-          val env1 = env0 + sym
+        val rulesUsed = rules map {
+          case SelectChannelRule(Binder(sym, _), chan, body) =>
+            // Extend the environment with the symbol.
+            val env1 = env0 + sym
 
-          // Check for shadowing.
-          val shadowedVar = shadowing(sym.text, sym.loc, env0)
+            // Check for shadowing.
+            val shadowedVar = shadowing(sym.text, sym.loc, env0)
 
-          // Visit the channel and body expressions.
-          val chanUsed = visitExp(chan, env1, rc)
-          val bodyUsed = visitExp(body, env1, rc)
+            // Visit the channel and body expressions.
+            val chanUsed = visitExp(chan, env1, rc)
+            val bodyUsed = visitExp(body, env1, rc)
 
-          // Check if the variable symbol is dead in the body.
-          if (deadVarSym(sym, bodyUsed))
-            (chanUsed ++ bodyUsed ++ shadowedVar) - sym + UnusedVarSym(sym)
-          else
-            (chanUsed ++ bodyUsed ++ shadowedVar) - sym
-      }
+            // Check if the variable symbol is dead in the body.
+            if (deadVarSym(sym, bodyUsed))
+              (chanUsed ++ bodyUsed ++ shadowedVar) - sym + UnusedVarSym(sym)
+            else
+              (chanUsed ++ bodyUsed ++ shadowedVar) - sym
+        }
 
-      rulesUsed.foldLeft(defaultUsed) {
-        case (acc, used) => acc ++ used
-      }
+        rulesUsed.foldLeft(defaultUsed) {
+          case (acc, used) => acc ++ used
+        }
 
-    case Expr.Spawn(exp1, exp2, _, _, _) =>
-      val us1 = visitExp(exp1, env0, rc)
-      val us2 = visitExp(exp2, env0, rc)
-      us1 ++ us2
+      case Expr.Spawn(exp1, exp2, _, _, _) =>
+        val us1 = visitExp(exp1, env0, rc)
+        val us2 = visitExp(exp2, env0, rc)
+        us1 ++ us2
 
-    case Expr.ParYield(frags, exp, _, _, _) =>
-      val (used, env1, fvs) = visitParYieldFragments(frags, env0, rc)
-      val usedYield = visitExp(exp, env1, rc)
-      val unusedVarSyms = findUnusedVarSyms(fvs, usedYield)
-      (usedYield -- fvs) ++ unusedVarSyms ++ used
+      case Expr.ParYield(frags, exp, _, _, _) =>
+        val (used, env1, fvs) = visitParYieldFragments(frags, env0, rc)
+        val usedYield = visitExp(exp, env1, rc)
+        val unusedVarSyms = findUnusedVarSyms(fvs, usedYield)
+        (usedYield -- fvs) ++ unusedVarSyms ++ used
 
-    case Expr.Lazy(exp, _, _) =>
-      visitExp(exp, env0, rc)
+      case Expr.Lazy(exp, _, _) =>
+        visitExp(exp, env0, rc)
 
-    case Expr.Force(exp, _, _, _) => visitExp(exp, env0, rc)
+      case Expr.Force(exp, _, _, _) => visitExp(exp, env0, rc)
 
-    case Expr.FixpointConstraintSet(cs, _, _) =>
-      cs.foldLeft(Used.empty) {
-        case (used, con) => used ++ visitConstraint(con, env0, rc: RecursionContext)
-      }
+      case Expr.FixpointConstraintSet(cs, _, _) =>
+        cs.foldLeft(Used.empty) {
+          case (used, con) => used ++ visitConstraint(con, env0, rc: RecursionContext)
+        }
 
-    case Expr.FixpointLambda(_, exp, _, _, _) =>
-      visitExp(exp, env0, rc)
+      case Expr.FixpointLambda(_, exp, _, _, _) =>
+        visitExp(exp, env0, rc)
 
-    case Expr.FixpointMerge(exp1, exp2, _, _, _) =>
-      val us1 = visitExp(exp1, env0, rc)
-      val us2 = visitExp(exp2, env0, rc)
-      us1 ++ us2
+      case Expr.FixpointMerge(exp1, exp2, _, _, _) =>
+        val us1 = visitExp(exp1, env0, rc)
+        val us2 = visitExp(exp2, env0, rc)
+        us1 ++ us2
 
-    case Expr.FixpointSolve(exp, _, _, _) =>
-      visitExp(exp, env0, rc)
+      case Expr.FixpointSolve(exp, _, _, _) =>
+        visitExp(exp, env0, rc)
 
-    case Expr.FixpointFilter(_, exp, _, _, _) =>
-      visitExp(exp, env0, rc)
+      case Expr.FixpointFilter(_, exp, _, _, _) =>
+        visitExp(exp, env0, rc)
 
-    case Expr.FixpointInject(exp, _, _, _, _) =>
-      visitExp(exp, env0, rc)
+      case Expr.FixpointInject(exp, _, _, _, _) =>
+        visitExp(exp, env0, rc)
 
-    case Expr.FixpointProject(_, exp, _, _, _) =>
-      visitExp(exp, env0, rc)
+      case Expr.FixpointProject(_, exp, _, _, _) =>
+        visitExp(exp, env0, rc)
 
-    case Expr.Error(_, _, _) =>
-      lctx.errorLocs += e0.loc
-      Used.empty
+      case Expr.Error(_, _, _) =>
+        lctx.errorLocs += e0.loc
+        Used.empty
 
+    }
   }
 
   /**

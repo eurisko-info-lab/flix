@@ -199,6 +199,8 @@ class Shell(bootstrap: Bootstrap, options: Options) {
     * Displays documentation for the given identifier
     */
   private def execInfo(s: String)(implicit terminal: Terminal): Unit = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     val w = terminal.writer()
     val traitSym = Symbol.mkTraitSym(s)
     val defnSym = Symbol.mkDefnSym(s)

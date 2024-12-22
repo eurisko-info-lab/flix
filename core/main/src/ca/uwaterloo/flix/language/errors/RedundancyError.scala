@@ -16,11 +16,10 @@
 
 package ca.uwaterloo.flix.language.errors
 
-import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.shared.TraitConstraint
 import ca.uwaterloo.flix.language.ast.{Name, SourceLocation, Symbol, Type, TypeConstructor}
-import ca.uwaterloo.flix.language.fmt.{FormatTraitConstraint, FormatType}
+import ca.uwaterloo.flix.language.fmt.{FormatOptions, FormatTraitConstraint, FormatType}
 import ca.uwaterloo.flix.util.Formatter
 
 /**
@@ -138,7 +137,7 @@ object RedundancyError {
     * @param redundantTconstr the tconstr that is made redundant by the other.
     * @param loc              the location where the error occured.
     */
-  case class RedundantTraitConstraint(entailingTconstr: TraitConstraint, redundantTconstr: TraitConstraint, loc: SourceLocation)(implicit flix: Flix) extends RedundancyError {
+  case class RedundantTraitConstraint(entailingTconstr: TraitConstraint, redundantTconstr: TraitConstraint, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends RedundancyError {
     def summary: String = "Redundant type constraint."
 
     def message(formatter: Formatter): String = {
@@ -270,7 +269,7 @@ object RedundancyError {
     * @param tpe the type of the expression.
     * @param loc the location of the expression.
     */
-  case class UnderAppliedFunction(tpe: Type, loc: SourceLocation)(implicit flix: Flix) extends RedundancyError {
+  case class UnderAppliedFunction(tpe: Type, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends RedundancyError {
     def summary: String = "Under applied function. Missing function argument(s)?"
 
     def message(formatter: Formatter): String = {
@@ -518,7 +517,7 @@ object RedundancyError {
     * @param tpe the type of the expression.
     * @param loc the location of the expression.
     */
-  case class UnusedMustUseValue(tpe: Type, loc: SourceLocation)(implicit flix: Flix) extends RedundancyError {
+  case class UnusedMustUseValue(tpe: Type, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends RedundancyError {
     def summary: String = "Unused value but its type is marked as @MustUse"
 
     def message(formatter: Formatter): String = {
@@ -606,7 +605,7 @@ object RedundancyError {
     * @param tpe the type of the expression.
     * @param loc the location of the expression.
     */
-  case class UselessExpression(tpe: Type, loc: SourceLocation)(implicit flix: Flix) extends RedundancyError {
+  case class UselessExpression(tpe: Type, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends RedundancyError {
     def summary: String = "Useless expression."
 
     def message(formatter: Formatter): String = {

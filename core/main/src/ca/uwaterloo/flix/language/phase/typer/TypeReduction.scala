@@ -19,6 +19,7 @@ import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.ast.shared.{AssocTypeDef, Scope}
 import ca.uwaterloo.flix.language.ast.{Kind, RigidityEnv, SourceLocation, Symbol, Type, TypeConstructor}
 import ca.uwaterloo.flix.language.errors.TypeError
+import ca.uwaterloo.flix.language.fmt.FormatOptions
 import ca.uwaterloo.flix.language.phase.unification.Unification
 import ca.uwaterloo.flix.util.collection.{ListMap, ListOps}
 import ca.uwaterloo.flix.util.{InternalCompilerException, JvmUtils, Result}
@@ -49,122 +50,126 @@ object TypeReduction {
     *   Elm[Elm[a]]   ~> Elm[Elm[a]]
     * }}}
     */
-  def simplify(tpe: Type, renv0: RigidityEnv, loc: SourceLocation)(implicit scope: Scope, eenv: ListMap[Symbol.AssocTypeSym, AssocTypeDef], flix: Flix): Result[(Type, Boolean), TypeError] = tpe match {
-    // A var is already simple.
-    case t: Type.Var => Result.Ok((t, false))
+  def simplify(tpe: Type, renv0: RigidityEnv, loc: SourceLocation)(implicit scope: Scope, eenv: ListMap[Symbol.AssocTypeSym, AssocTypeDef], flix: Flix): Result[(Type, Boolean), TypeError] = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
 
-    // A constant is already simple
-    case t: Type.Cst => Result.Ok((t, false))
+    tpe match {
+      // A var is already simple.
+      case t: Type.Var => Result.Ok((t, false))
 
-    // lapp_L and lapp_R
-    case Type.Apply(tpe1, tpe2, loc) =>
-      for {
-        (t1, p1) <- simplify(tpe1, renv0, loc)
-        (t2, p2) <- simplify(tpe2, renv0, loc)
-      } yield {
-        (Type.Apply(t1, t2, loc), p1 || p2)
-      }
+      // A constant is already simple
+      case t: Type.Cst => Result.Ok((t, false))
 
-    // arg_R and syn_R
-    case Type.AssocType(cst, arg, kind, _) =>
-      simplify(arg, renv0, loc).flatMap {
-        case (t, p) =>
-          // we mark t's tvars as rigid so we get the substitution in the right direction
-          val renv = t.typeVars.map(_.sym).foldLeft(RigidityEnv.empty)(_.markRigid(_))
-          val insts = eenv(cst.sym)
+      // lapp_L and lapp_R
+      case Type.Apply(tpe1, tpe2, loc) =>
+        for {
+          (t1, p1) <- simplify(tpe1, renv0, loc)
+          (t2, p2) <- simplify(tpe2, renv0, loc)
+        } yield {
+          (Type.Apply(t1, t2, loc), p1 || p2)
+        }
 
-          // find the first (and only) instance that matches
-          val simplifiedOpt = ListOps.findMap(insts) {
-            inst =>
-              Unification.fullyUnifyTypes(t, inst.arg, renv, eenv).map {
-                case subst => subst(inst.ret)
-              }
-          }
-          simplifiedOpt match {
-            // Can't reduce. Check what the original type was.
-            case None =>
-              t.baseType match {
-                // If it's a var, it's ok. It may be substituted later to a type we can reduce.
-                // Or it might be part of the signature as an associated type.
-                case Type.Var(_, loc) => Result.Ok((Type.AssocType(cst, t, kind, loc), p))
-                // If it's an associated type, it's ok. It may be reduced later to a concrete type.
-                case _: Type.AssocType => Result.Ok((Type.AssocType(cst, t, kind, loc), p))
-                // Otherwise it's a problem.
-                case baseTpe => Result.Err(ConstraintSolver.mkMissingInstance(cst.sym.trt, baseTpe, renv, loc))
-              }
-            // We could reduce! Simplify further if possible.
-            case Some(t) => simplify(t, renv0, loc).map { case (res, _) => (res, true) }
-          }
-      }
+      // arg_R and syn_R
+      case Type.AssocType(cst, arg, kind, _) =>
+        simplify(arg, renv0, loc).flatMap {
+          case (t, p) =>
+            // we mark t's tvars as rigid so we get the substitution in the right direction
+            val renv = t.typeVars.map(_.sym).foldLeft(RigidityEnv.empty)(_.markRigid(_))
+            val insts = eenv(cst.sym)
 
-    case Type.Alias(_, _, t, _) => simplify(t, renv0, loc)
+            // find the first (and only) instance that matches
+            val simplifiedOpt = ListOps.findMap(insts) {
+              inst =>
+                Unification.fullyUnifyTypes(t, inst.arg, renv, eenv).map {
+                  case subst => subst(inst.ret)
+                }
+            }
+            simplifiedOpt match {
+              // Can't reduce. Check what the original type was.
+              case None =>
+                t.baseType match {
+                  // If it's a var, it's ok. It may be substituted later to a type we can reduce.
+                  // Or it might be part of the signature as an associated type.
+                  case Type.Var(_, loc) => Result.Ok((Type.AssocType(cst, t, kind, loc), p))
+                  // If it's an associated type, it's ok. It may be reduced later to a concrete type.
+                  case _: Type.AssocType => Result.Ok((Type.AssocType(cst, t, kind, loc), p))
+                  // Otherwise it's a problem.
+                  case baseTpe => Result.Err(ConstraintSolver.mkMissingInstance(cst.sym.trt, baseTpe, renv, loc))
+                }
+              // We could reduce! Simplify further if possible.
+              case Some(t) => simplify(t, renv0, loc).map { case (res, _) => (res, true) }
+            }
+        }
 
-    case Type.JvmToType(j0, _) =>
-      simplify(j0, renv0, loc).map {
-        case (Type.Cst(TypeConstructor.JvmConstructor(constructor), _), _) => (Type.getFlixType(constructor.getDeclaringClass), true)
-        case (Type.Cst(TypeConstructor.JvmField(field), _), _) => (Type.getFlixType(field.getType), true)
-        case (Type.Cst(TypeConstructor.JvmMethod(method), _), _) => (Type.getFlixType(method.getReturnType), true)
-        case (j, p) => (Type.JvmToType(j, loc), p)
-      }
+      case Type.Alias(_, _, t, _) => simplify(t, renv0, loc)
 
-    case Type.JvmToEff(j0, _) =>
-      simplify(j0, renv0, loc).map {
-        case (Type.Cst(TypeConstructor.JvmConstructor(constructor), loc), _) =>
-          (PrimitiveEffects.getConstructorEffs(constructor, loc), true)
+      case Type.JvmToType(j0, _) =>
+        simplify(j0, renv0, loc).map {
+          case (Type.Cst(TypeConstructor.JvmConstructor(constructor), _), _) => (Type.getFlixType(constructor.getDeclaringClass), true)
+          case (Type.Cst(TypeConstructor.JvmField(field), _), _) => (Type.getFlixType(field.getType), true)
+          case (Type.Cst(TypeConstructor.JvmMethod(method), _), _) => (Type.getFlixType(method.getReturnType), true)
+          case (j, p) => (Type.JvmToType(j, loc), p)
+        }
 
-        case (Type.Cst(TypeConstructor.JvmMethod(method), _), _) =>
-          (PrimitiveEffects.getMethodEffs(method, loc), true)
+      case Type.JvmToEff(j0, _) =>
+        simplify(j0, renv0, loc).map {
+          case (Type.Cst(TypeConstructor.JvmConstructor(constructor), loc), _) =>
+            (PrimitiveEffects.getConstructorEffs(constructor, loc), true)
 
-        case (Type.Cst(TypeConstructor.JvmField(_), _), _) =>
-          // Fields should never have any effect other than IO.
-          throw InternalCompilerException("Unexpected field effect", loc)
+          case (Type.Cst(TypeConstructor.JvmMethod(method), _), _) =>
+            (PrimitiveEffects.getMethodEffs(method, loc), true)
 
-        case (j, p) => (Type.JvmToEff(j, loc), p)
-      }
+          case (Type.Cst(TypeConstructor.JvmField(_), _), _) =>
+            // Fields should never have any effect other than IO.
+            throw InternalCompilerException("Unexpected field effect", loc)
 
-    case cons@Type.UnresolvedJvmType(Type.JvmMember.JvmConstructor(clazz, tpes), _) =>
-      lookupConstructor(clazz, tpes) match {
-        case JavaConstructorResolution.Resolved(constructor) =>
-          val tpe = Type.Cst(TypeConstructor.JvmConstructor(constructor), loc)
-          Result.Ok((tpe, true))
-       case JavaConstructorResolution.NotFound =>
-          Result.Err(TypeError.ConstructorNotFound(clazz, tpes, renv0, loc))
-        case JavaConstructorResolution.UnresolvedTypes =>
-          Result.Ok(cons, false)
-      }
+          case (j, p) => (Type.JvmToEff(j, loc), p)
+        }
 
-    case meth@Type.UnresolvedJvmType(Type.JvmMember.JvmMethod(tpe, name, tpes), _) =>
-      lookupMethod(tpe, name.name, tpes) match {
-        case JavaMethodResolution.Resolved(method) =>
-          val tpe = Type.Cst(TypeConstructor.JvmMethod(method), loc)
-          Result.Ok((tpe, true))
-        case JavaMethodResolution.NotFound =>
-          Result.Err(TypeError.MethodNotFound(name, tpe, tpes, loc))
-        case JavaMethodResolution.UnresolvedTypes =>
-          Result.Ok((meth, false))
-      }
+      case cons@Type.UnresolvedJvmType(Type.JvmMember.JvmConstructor(clazz, tpes), _) =>
+        lookupConstructor(clazz, tpes) match {
+          case JavaConstructorResolution.Resolved(constructor) =>
+            val tpe = Type.Cst(TypeConstructor.JvmConstructor(constructor), loc)
+            Result.Ok((tpe, true))
+          case JavaConstructorResolution.NotFound =>
+            Result.Err(TypeError.ConstructorNotFound(clazz, tpes, renv0, loc))
+          case JavaConstructorResolution.UnresolvedTypes =>
+            Result.Ok(cons, false)
+        }
 
-    case meth@Type.UnresolvedJvmType(Type.JvmMember.JvmStaticMethod(clazz, name, tpes), _) =>
-      lookupStaticMethod(clazz, name.name, tpes) match {
-        case JavaMethodResolution.Resolved(method) =>
-          val tpe = Type.Cst(TypeConstructor.JvmMethod(method), loc)
-          Result.Ok((tpe, true))
-         case JavaMethodResolution.NotFound =>
-          Result.Err(TypeError.StaticMethodNotFound(clazz, name, tpes, renv0, loc))
-        case JavaMethodResolution.UnresolvedTypes =>
-          Result.Ok((meth, false))
-      }
+      case meth@Type.UnresolvedJvmType(Type.JvmMember.JvmMethod(tpe, name, tpes), _) =>
+        lookupMethod(tpe, name.name, tpes) match {
+          case JavaMethodResolution.Resolved(method) =>
+            val tpe = Type.Cst(TypeConstructor.JvmMethod(method), loc)
+            Result.Ok((tpe, true))
+          case JavaMethodResolution.NotFound =>
+            Result.Err(TypeError.MethodNotFound(name, tpe, tpes, loc))
+          case JavaMethodResolution.UnresolvedTypes =>
+            Result.Ok((meth, false))
+        }
 
-    case field@Type.UnresolvedJvmType(Type.JvmMember.JvmField(base, tpe, name), _) =>
-      lookupField(tpe, name.name) match {
-        case JavaFieldResolution.Resolved(field) =>
-          val tpe = Type.Cst(TypeConstructor.JvmField(field), loc)
-          Result.Ok((tpe, true))
-        case JavaFieldResolution.NotFound =>
-          Result.Err(TypeError.FieldNotFound(base, name, tpe, loc))
-        case JavaFieldResolution.UnresolvedTypes =>
-          Result.Ok((field, false))
-      }
+      case meth@Type.UnresolvedJvmType(Type.JvmMember.JvmStaticMethod(clazz, name, tpes), _) =>
+        lookupStaticMethod(clazz, name.name, tpes) match {
+          case JavaMethodResolution.Resolved(method) =>
+            val tpe = Type.Cst(TypeConstructor.JvmMethod(method), loc)
+            Result.Ok((tpe, true))
+          case JavaMethodResolution.NotFound =>
+            Result.Err(TypeError.StaticMethodNotFound(clazz, name, tpes, renv0, loc))
+          case JavaMethodResolution.UnresolvedTypes =>
+            Result.Ok((meth, false))
+        }
+
+      case field@Type.UnresolvedJvmType(Type.JvmMember.JvmField(base, tpe, name), _) =>
+        lookupField(tpe, name.name) match {
+          case JavaFieldResolution.Resolved(field) =>
+            val tpe = Type.Cst(TypeConstructor.JvmField(field), loc)
+            Result.Ok((tpe, true))
+          case JavaFieldResolution.NotFound =>
+            Result.Err(TypeError.FieldNotFound(base, name, tpe, loc))
+          case JavaFieldResolution.UnresolvedTypes =>
+            Result.Ok((field, false))
+        }
+    }
   }
 
   /** Tries to find a constructor of `clazz` that takes arguments of type `ts`. */

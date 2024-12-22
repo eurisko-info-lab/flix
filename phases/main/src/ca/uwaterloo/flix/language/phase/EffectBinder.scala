@@ -17,6 +17,7 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.Symbol.VarSym
 import ca.uwaterloo.flix.language.ast.shared.{BoundBy, ExpPosition, Scope}
 import ca.uwaterloo.flix.language.ast.{AtomicOp, LiftedAst, Purity, ReducedAst, SemanticOp, SourceLocation, Symbol}
@@ -360,6 +361,8 @@ class EffectBinder extends CompilerPlugin[LiftedAst.Root, ReducedAst.Root] {
     * The local params of [[LocalContext]] is updated with this new binder.
     */
   private def letBindExpr(binders: mutable.ArrayBuffer[Binder])(e: ReducedAst.Expr)(implicit flix: Flix): ReducedAst.Expr.Var = {
+    implicit val genSym: GenSym = flix.genSym
+
     val loc = e.loc.asSynthetic
     val sym = Symbol.freshVarSym("anf", BoundBy.Let, loc)
     binders.addOne(LetBinder(sym, e, loc))

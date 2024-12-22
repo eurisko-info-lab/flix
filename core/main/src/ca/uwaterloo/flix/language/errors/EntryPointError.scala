@@ -15,10 +15,9 @@
  */
 package ca.uwaterloo.flix.language.errors
 
-import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.{SourceLocation, Symbol, Type}
-import ca.uwaterloo.flix.language.fmt.FormatType
+import ca.uwaterloo.flix.language.fmt.{FormatType, FormatOptions}
 import ca.uwaterloo.flix.util.Formatter
 
 /**
@@ -36,7 +35,7 @@ object EntryPointError {
     * @param eff the effect.
     * @param loc the location where the error occurred.
     */
-  case class IllegalEntryPointEffect(eff: Type, loc: SourceLocation)(implicit flix: Flix) extends EntryPointError {
+  case class IllegalEntryPointEffect(eff: Type, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends EntryPointError {
     override def summary: String = s"Unexpected entry point effect: ${FormatType.formatType(eff)}."
 
     override def message(formatter: Formatter): String = {
@@ -130,7 +129,7 @@ object EntryPointError {
     * @param tpe the result type.
     * @param loc the location where the error occurred.
     */
-  case class IllegalMainEntryPointResult(tpe: Type, loc: SourceLocation)(implicit flix: Flix) extends EntryPointError {
+  case class IllegalMainEntryPointResult(tpe: Type, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends EntryPointError {
     override def summary: String = s"Unexpected result type for main: ${FormatType.formatType(tpe)}."
 
     override def message(formatter: Formatter): String = {

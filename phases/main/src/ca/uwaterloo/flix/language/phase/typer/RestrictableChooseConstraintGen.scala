@@ -16,6 +16,7 @@
 package ca.uwaterloo.flix.language.phase.typer
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.KindedAst.RestrictableChoosePattern
 import ca.uwaterloo.flix.language.ast.shared.Scope
 import ca.uwaterloo.flix.language.ast.shared.SymUse.RestrictableEnumSymUse
@@ -72,6 +73,7 @@ object RestrictableChooseConstraintGen {
     */
   def visitRestrictableChoose(exp: KindedAst.Expr.RestrictableChoose)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): (Type, Type) = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
 
     exp match {
       case KindedAst.Expr.RestrictableChoose(false, exp0, rules0, tpe0, loc) =>
@@ -191,6 +193,8 @@ object RestrictableChooseConstraintGen {
     * Performs type inference on the given restrictable tag expression.
     */
   def visitApplyRestrictableTag(exp: KindedAst.Expr.RestrictableTag)(implicit scope: Scope, c: TypeContext, root: KindedAst.Root, flix: Flix): (Type, Type) = {
+    implicit val genSym: GenSym = flix.genSym
+
     exp match {
       case KindedAst.Expr.RestrictableTag(symUse, exps, isOpen, tvar, evar, loc) =>
 
@@ -269,6 +273,8 @@ object RestrictableChooseConstraintGen {
     */
   def visitOpenAs(exp0: KindedAst.Expr.OpenAs)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): (Type, Type) = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     exp0 match {
       case KindedAst.Expr.OpenAs(RestrictableEnumSymUse(sym, _), exp, tvar, loc) =>
         val `enum` = root.restrictableEnums(sym)
@@ -312,6 +318,7 @@ object RestrictableChooseConstraintGen {
     // TODO RESTR-VARS can get rid of enumSym since it's in the decl
     // Make fresh vars for all the type parameters
     // This will unify with the enum type to extract the index
+    implicit val genSym: GenSym = flix.genSym
 
     def instantiate(tp: KindedAst.TypeParam): Type.Var = tp match {
       case KindedAst.TypeParam(_, sym, loc) => Type.freshVar(sym.kind, loc, sym.isRegion)
@@ -335,6 +342,7 @@ object RestrictableChooseConstraintGen {
     */
   private def visitRestrictableChoosePattern(pat0: KindedAst.RestrictableChoosePattern)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): Type = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
 
     /**
       * Local pattern visitor.

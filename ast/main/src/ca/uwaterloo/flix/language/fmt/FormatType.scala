@@ -15,10 +15,9 @@
  */
 package ca.uwaterloo.flix.language.fmt
 
-import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.ast.shared.{Scope, VarText}
 import ca.uwaterloo.flix.language.ast.{Kind, RigidityEnv, SourceLocation, Symbol, Type}
-import ca.uwaterloo.flix.language.phase.unification.Substitution
+import ca.uwaterloo.flix.language.phase.unification.BasicSubstitution
 
 object FormatType {
   /**
@@ -28,12 +27,12 @@ object FormatType {
     *
     * Performs alpha renaming if the rigidity environment is present.
     */
-  def formatType(tpe: Type, renv: Option[RigidityEnv] = None)(implicit flix: Flix): String = {
+  def formatType(tpe: Type, renv: Option[RigidityEnv] = None)(implicit formatOptions: FormatOptions): String = {
     val renamed = renv match {
       case None => tpe
       case Some(env) => alphaRename(tpe, env)
     }
-    formatTypeWithOptions(renamed, flix.getFormatOptions)
+    formatTypeWithOptions(renamed, formatOptions)
   }
 
   /**
@@ -53,7 +52,7 @@ object FormatType {
       case (tvar@Type.Var(sym, loc), index) =>
         sym -> (Type.Var(new Symbol.KindedTypeVarSym(index, sym.text, sym.kind, sym.isRegion, sym.scope, loc), loc): Type)
     }
-    val s = Substitution(m.toMap)
+    val s = BasicSubstitution(m.toMap)
 
     // Apply the substitution to the type.
     s(tpe)
@@ -81,8 +80,8 @@ object FormatType {
   /**
     * Transforms the given simple type into a string.
     */
-  def formatSimpleType(tpe: SimpleType)(implicit flix: Flix): String =
-    formatSimpleTypeWithOptions(tpe, flix.getFormatOptions)
+  def formatSimpleType(tpe: SimpleType)(implicit formatOptions: FormatOptions): String =
+    formatSimpleTypeWithOptions(tpe, formatOptions)
 
   /**
     * Transforms the given simple type into a string, using the given format options.

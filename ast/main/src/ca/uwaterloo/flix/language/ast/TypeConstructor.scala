@@ -1,7 +1,6 @@
 package ca.uwaterloo.flix.language.ast
 
 import ca.uwaterloo.flix.language.ast.shared.ScalaAnnotations.{EliminatedBy, IntroducedBy}
-import ca.uwaterloo.flix.language.phase.{Kinder, Lowering, Monomorpher, Simplifier}
 
 import java.lang.reflect.{Constructor, Field, Method}
 import scala.collection.immutable.SortedSet
@@ -27,7 +26,6 @@ object TypeConstructor {
   /**
     * A type constructor that represent an unconstrained type after monomorphization.
     */
-  @IntroducedBy(Monomorpher().getClass)
   case object AnyType extends TypeConstructor {
     override def kind: Kind = Kind.Star
   }
@@ -133,7 +131,6 @@ object TypeConstructor {
   /**
     * A type constructor that represents the type of functions.
     */
-  @IntroducedBy(Kinder.getClass)
   case class Arrow(arity: Int) extends TypeConstructor {
     def kind: Kind = Kind.Eff ->: Kind.mkArrow(arity)
   }
@@ -143,7 +140,6 @@ object TypeConstructor {
     *
     * Warning: This is not part of the frontend; it only exists post Simplification.
     */
-  @IntroducedBy(Simplifier().getClass)
   case class ArrowWithoutEffect(arity: Int) extends TypeConstructor {
     def kind: Kind = Kind.mkArrow(arity)
   }
@@ -205,7 +201,6 @@ object TypeConstructor {
   /**
     * A type constructor that represent the type of channel senders.
     */
-  @EliminatedBy(Lowering().getClass)
   case object Sender extends TypeConstructor {
     /**
       * The shape of a sender is Sender[t].
@@ -216,7 +211,6 @@ object TypeConstructor {
   /**
     * A type constructor that represent the type of channel receivers.
     */
-  @EliminatedBy(Lowering().getClass)
   case object Receiver extends TypeConstructor {
     /**
       * The shape of a sender is Receiver[t].
@@ -237,19 +231,16 @@ object TypeConstructor {
   /**
     * A type constructor that represents the type of enums.
     */
-  @IntroducedBy(Kinder.getClass)
   case class Enum(sym: Symbol.EnumSym, kind: Kind) extends TypeConstructor
 
   /**
    * A type constructor that represents the type of structs.
    */
-  @IntroducedBy(Kinder.getClass)
   case class Struct(sym: Symbol.StructSym, kind: Kind) extends TypeConstructor
 
   /**
     * A type constructor that represents the type of enums.
     */
-  @IntroducedBy(Kinder.getClass)
   case class RestrictableEnum(sym: Symbol.RestrictableEnumSym, kind: Kind) extends TypeConstructor
 
   /**
@@ -296,7 +287,6 @@ object TypeConstructor {
     *
     * Warning: This is not part of the frontend; it only exists post Simplification.
     */
-  @IntroducedBy(Simplifier().getClass)
   case object ArrayWithoutRegion extends TypeConstructor {
     /**
       * The shape of an array is `ArrayWithoutRegion[t]`.
@@ -475,7 +465,6 @@ object TypeConstructor {
     *
     * Warning: This is not part of the frontend; it only exists post Simplification.
     */
-  @IntroducedBy(Simplifier().getClass)
   case object RegionWithoutRegion extends TypeConstructor {
     /**
       * The shape of a region is RegionWithoutRegion.

@@ -18,10 +18,10 @@ package ca.uwaterloo.flix.language.phase.unification
 
 import ca.uwaterloo.flix.TestUtils
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.shared.{Scope, VarText}
 import ca.uwaterloo.flix.language.ast.{Kind, Name, RigidityEnv, SourceLocation, Symbol, Type, TypeConstructor}
 import ca.uwaterloo.flix.util.Result
-
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.collection.immutable.SortedSet
@@ -407,6 +407,7 @@ class TestCaseSetUnification extends AnyFunSuite with TestUtils {
 
 
   private def mkTypeVarSym(name: String, enumSym: Symbol.RestrictableEnumSym): Symbol.KindedTypeVarSym = {
+    implicit val genSym: GenSym = GenSym()
     Symbol.freshKindedTypeVarSym(VarText.SourceText(name), Kind.CaseSet(enumSym), isRegion = false, loc)
   }
 

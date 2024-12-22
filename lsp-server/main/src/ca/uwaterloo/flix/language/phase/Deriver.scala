@@ -16,12 +16,14 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.ast.shared.SymUse.*
 import ca.uwaterloo.flix.language.ast.{Kind, KindedAst, Name, Scheme, SemanticOp, SourceLocation, Symbol, Type, TypeConstructor}
 import ca.uwaterloo.flix.language.dbg.AstPrinter.DebugKindedAst
 import ca.uwaterloo.flix.language.errors.DerivationError
+import ca.uwaterloo.flix.language.fmt.FormatOptions
 import ca.uwaterloo.flix.language.phase.util.PredefinedTraits
 import ca.uwaterloo.flix.util.ParOps
 
@@ -119,52 +121,60 @@ object Deriver extends ValidPhasePlugin[KindedAst.Root, KindedAst.Root] {
     * }
     * }}}
     */
-  private def mkEqInstance(enum0: KindedAst.Enum, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.Instance = enum0 match {
-    case KindedAst.Enum(_, _, _, _, tparams, _, _, tpe, _) =>
-      val eqTraitSym = PredefinedTraits.lookupTraitSym("Eq", root)
-      val eqDefSym = Symbol.mkDefnSym("Eq.eq", Some(flix.genSym.freshId()))
+  private def mkEqInstance(enum0: KindedAst.Enum, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.Instance = {
+    implicit val genSym: GenSym = flix.genSym
 
-      val param1 = Symbol.freshVarSym("x", BoundBy.FormalParam, loc)
-      val param2 = Symbol.freshVarSym("y", BoundBy.FormalParam, loc)
-      val exp = mkEqImpl(enum0, param1, param2, loc, root)
-      val spec = mkEqSpec(enum0, param1, param2, loc, root)
+    enum0 match {
+      case KindedAst.Enum(_, _, _, _, tparams, _, _, tpe, _) =>
+        val eqTraitSym = PredefinedTraits.lookupTraitSym("Eq", root)
+        val eqDefSym = Symbol.mkDefnSym("Eq.eq", Some(flix.genSym.freshId()))
 
-      val defn = KindedAst.Def(eqDefSym, spec, exp, loc)
+        val param1 = Symbol.freshVarSym("x", BoundBy.FormalParam, loc)
+        val param2 = Symbol.freshVarSym("y", BoundBy.FormalParam, loc)
+        val exp = mkEqImpl(enum0, param1, param2, loc, root)
+        val spec = mkEqSpec(enum0, param1, param2, loc, root)
 
-      val tconstrs = getTraitConstraintsForTypeParams(tparams, eqTraitSym, loc)
+        val defn = KindedAst.Def(eqDefSym, spec, exp, loc)
 
-      KindedAst.Instance(
-        doc = Doc(Nil, loc),
-        ann = Annotations.Empty,
-        mod = Modifiers.Empty,
-        trt = TraitSymUse(eqTraitSym, loc),
-        tpe = tpe,
-        tconstrs = tconstrs,
-        assocs = Nil,
-        defs = List(defn),
-        ns = Name.RootNS,
-        loc = loc
-      )
+        val tconstrs = getTraitConstraintsForTypeParams(tparams, eqTraitSym, loc)
+
+        KindedAst.Instance(
+          doc = Doc(Nil, loc),
+          ann = Annotations.Empty,
+          mod = Modifiers.Empty,
+          trt = TraitSymUse(eqTraitSym, loc),
+          tpe = tpe,
+          tconstrs = tconstrs,
+          assocs = Nil,
+          defs = List(defn),
+          ns = Name.RootNS,
+          loc = loc
+        )
+    }
   }
 
   /**
     * Creates the eq implementation for the given enum, where `param1` and `param2` are the parameters to the function.
     */
-  private def mkEqImpl(enum0: KindedAst.Enum, param1: Symbol.VarSym, param2: Symbol.VarSym, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.Expr = enum0 match {
-    case KindedAst.Enum(_, _, _, _, _, _, cases, _, _) =>
-      // create a match rule for each case
-      val mainMatchRules = getCasesInStableOrder(cases).map(mkEqMatchRule(_, loc, root))
+  private def mkEqImpl(enum0: KindedAst.Enum, param1: Symbol.VarSym, param2: Symbol.VarSym, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.Expr = {
+    implicit val genSym: GenSym = flix.genSym
 
-      // create a default rule
-      // `case _ => false`
-      val defaultRule = KindedAst.MatchRule(KindedAst.Pattern.Wild(Type.freshVar(Kind.Star, loc), loc), None, KindedAst.Expr.Cst(Constant.Bool(false), loc))
+    enum0 match {
+      case KindedAst.Enum(_, _, _, _, _, _, cases, _, _) =>
+        // create a match rule for each case
+        val mainMatchRules = getCasesInStableOrder(cases).map(mkEqMatchRule(_, loc, root))
 
-      // group the match rules in an expression
-      KindedAst.Expr.Match(
-        KindedAst.Expr.Tuple(List(mkVarExpr(param1, loc), mkVarExpr(param2, loc)), loc),
-        mainMatchRules ++ List(defaultRule),
-        loc
-      )
+        // create a default rule
+        // `case _ => false`
+        val defaultRule = KindedAst.MatchRule(KindedAst.Pattern.Wild(Type.freshVar(Kind.Star, loc), loc), None, KindedAst.Expr.Cst(Constant.Bool(false), loc))
+
+        // group the match rules in an expression
+        KindedAst.Expr.Match(
+          KindedAst.Expr.Tuple(List(mkVarExpr(param1, loc), mkVarExpr(param2, loc)), loc),
+          mainMatchRules ++ List(defaultRule),
+          loc
+        )
+    }
   }
 
   /**
@@ -198,44 +208,48 @@ object Deriver extends ValidPhasePlugin[KindedAst.Root, KindedAst.Root] {
   /**
     * Creates an Eq match rule for the given enum case.
     */
-  private def mkEqMatchRule(caze: KindedAst.Case, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.MatchRule = caze match {
-    case KindedAst.Case(sym, tpes, _, _) =>
-      val eqSym = PredefinedTraits.lookupSigSym("Eq", "eq", root)
+  private def mkEqMatchRule(caze: KindedAst.Case, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.MatchRule = {
+    implicit val genSym: GenSym = flix.genSym
 
-      // get a pattern corresponding to this case, e.g.
-      // `case C2(x0, x1)`
-      val (pat1, varSyms1) = mkPattern(sym, tpes, "x", loc)
-      val (pat2, varSyms2) = mkPattern(sym, tpes, "y", loc)
-      val pat = KindedAst.Pattern.Tuple(List(pat1, pat2), loc)
+    caze match {
+      case KindedAst.Case(sym, tpes, _, _) =>
+        val eqSym = PredefinedTraits.lookupSigSym("Eq", "eq", root)
 
-      // call eq on each variable pair
-      // `x0 == y0`, `x1 == y1`
-      val eqs = varSyms1.zip(varSyms2).map {
-        case (varSym1, varSym2) =>
-          KindedAst.Expr.ApplySig(SigSymUse(eqSym, loc),
-            List(
-              mkVarExpr(varSym1, loc),
-              mkVarExpr(varSym2, loc)
-            ),
-            Type.freshVar(Kind.Star, loc),
-            Type.freshVar(Kind.Star, loc),
-            Type.freshVar(Kind.Eff, loc),
-            loc
-          )
-      }
+        // get a pattern corresponding to this case, e.g.
+        // `case C2(x0, x1)`
+        val (pat1, varSyms1) = mkPattern(sym, tpes, "x", loc)
+        val (pat2, varSyms2) = mkPattern(sym, tpes, "y", loc)
+        val pat = KindedAst.Pattern.Tuple(List(pat1, pat2), loc)
 
-      // put it all together
-      // `x0 == y0 and x1 == y1`
-      val exp = eqs match {
-        // Case 1: no arguments: return true
-        case Nil => KindedAst.Expr.Cst(Constant.Bool(true), loc)
-        // Case 2: at least one argument: join everything with `and`
-        case head :: tail => tail.foldLeft(head: KindedAst.Expr) {
-          case (acc, eq) => KindedAst.Expr.Binary(SemanticOp.BoolOp.And, acc, eq, Type.freshVar(Kind.Star, loc), loc)
+        // call eq on each variable pair
+        // `x0 == y0`, `x1 == y1`
+        val eqs = varSyms1.zip(varSyms2).map {
+          case (varSym1, varSym2) =>
+            KindedAst.Expr.ApplySig(SigSymUse(eqSym, loc),
+              List(
+                mkVarExpr(varSym1, loc),
+                mkVarExpr(varSym2, loc)
+              ),
+              Type.freshVar(Kind.Star, loc),
+              Type.freshVar(Kind.Star, loc),
+              Type.freshVar(Kind.Eff, loc),
+              loc
+            )
         }
-      }
 
-      KindedAst.MatchRule(pat, None, exp)
+        // put it all together
+        // `x0 == y0 and x1 == y1`
+        val exp = eqs match {
+          // Case 1: no arguments: return true
+          case Nil => KindedAst.Expr.Cst(Constant.Bool(true), loc)
+          // Case 2: at least one argument: join everything with `and`
+          case head :: tail => tail.foldLeft(head: KindedAst.Expr) {
+            case (acc, eq) => KindedAst.Expr.Binary(SemanticOp.BoolOp.And, acc, eq, Type.freshVar(Kind.Star, loc), loc)
+          }
+        }
+
+        KindedAst.MatchRule(pat, None, exp)
+    }
   }
 
   /**
@@ -269,94 +283,102 @@ object Deriver extends ValidPhasePlugin[KindedAst.Root, KindedAst.Root] {
     * }
     * }}}
     */
-  private def mkOrderInstance(enum0: KindedAst.Enum, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.Instance = enum0 match {
-    case KindedAst.Enum(_, _, _, _, tparams, _, _, tpe, _) =>
-      val orderTraitSym = PredefinedTraits.lookupTraitSym("Order", root)
-      val compareDefSym = Symbol.mkDefnSym("Order.compare", Some(flix.genSym.freshId()))
+  private def mkOrderInstance(enum0: KindedAst.Enum, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.Instance = {
+    implicit val genSym: GenSym = flix.genSym
 
-      val param1 = Symbol.freshVarSym("x", BoundBy.FormalParam, loc)
-      val param2 = Symbol.freshVarSym("y", BoundBy.FormalParam, loc)
-      val exp = mkCompareImpl(enum0, param1, param2, loc, root)
-      val spec = mkCompareSpec(enum0, param1, param2, loc, root)
+    enum0 match {
+      case KindedAst.Enum(_, _, _, _, tparams, _, _, tpe, _) =>
+        val orderTraitSym = PredefinedTraits.lookupTraitSym("Order", root)
+        val compareDefSym = Symbol.mkDefnSym("Order.compare", Some(flix.genSym.freshId()))
 
-      val defn = KindedAst.Def(compareDefSym, spec, exp, loc)
+        val param1 = Symbol.freshVarSym("x", BoundBy.FormalParam, loc)
+        val param2 = Symbol.freshVarSym("y", BoundBy.FormalParam, loc)
+        val exp = mkCompareImpl(enum0, param1, param2, loc, root)
+        val spec = mkCompareSpec(enum0, param1, param2, loc, root)
 
-      val tconstrs = getTraitConstraintsForTypeParams(tparams, orderTraitSym, loc)
-      KindedAst.Instance(
-        doc = Doc(Nil, loc),
-        ann = Annotations.Empty,
-        mod = Modifiers.Empty,
-        trt = TraitSymUse(orderTraitSym, loc),
-        tpe = tpe,
-        tconstrs = tconstrs,
-        assocs = Nil,
-        defs = List(defn),
-        ns = Name.RootNS,
-        loc = loc
-      )
+        val defn = KindedAst.Def(compareDefSym, spec, exp, loc)
+
+        val tconstrs = getTraitConstraintsForTypeParams(tparams, orderTraitSym, loc)
+        KindedAst.Instance(
+          doc = Doc(Nil, loc),
+          ann = Annotations.Empty,
+          mod = Modifiers.Empty,
+          trt = TraitSymUse(orderTraitSym, loc),
+          tpe = tpe,
+          tconstrs = tconstrs,
+          assocs = Nil,
+          defs = List(defn),
+          ns = Name.RootNS,
+          loc = loc
+        )
+    }
   }
 
   /**
     * Creates the compare implementation for the given enum, where `param1` and `param2` are the parameters to the function.
     */
-  private def mkCompareImpl(enum0: KindedAst.Enum, param1: Symbol.VarSym, param2: Symbol.VarSym, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.Expr = enum0 match {
-    case KindedAst.Enum(_, _, _, _, _, _, cases, _, _) =>
-      val compareSigSym = PredefinedTraits.lookupSigSym("Order", "compare", root)
+  private def mkCompareImpl(enum0: KindedAst.Enum, param1: Symbol.VarSym, param2: Symbol.VarSym, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.Expr = {
+    implicit val genSym: GenSym = flix.genSym
 
-      val lambdaVarSym = Symbol.freshVarSym("indexOf", BoundBy.Let, loc)
+    enum0 match {
+      case KindedAst.Enum(_, _, _, _, _, _, cases, _, _) =>
+        val compareSigSym = PredefinedTraits.lookupSigSym("Order", "compare", root)
 
-      // Create the lambda mapping tags to indices
-      val lambdaParamVarSym = Symbol.freshVarSym("e", BoundBy.FormalParam, loc)
-      val indexMatchRules = getCasesInStableOrder(cases).zipWithIndex.map { case (caze, index) => mkCompareIndexMatchRule(caze, index, loc) }
-      val indexMatchExp = KindedAst.Expr.Match(mkVarExpr(lambdaParamVarSym, loc), indexMatchRules, loc)
-      val lambda = KindedAst.Expr.Lambda(
-        KindedAst.FormalParam(lambdaParamVarSym, Modifiers.Empty, lambdaParamVarSym.tvar, TypeSource.Ascribed, loc),
-        indexMatchExp,
-        allowSubeffecting = false,
-        loc
-      )
+        val lambdaVarSym = Symbol.freshVarSym("indexOf", BoundBy.Let, loc)
 
-      // Create the main match expression
-      val matchRules = getCasesInStableOrder(cases).map(mkComparePairMatchRule(_, loc, root))
-
-      // Create the default rule:
-      // `case _ => compare(indexOf(x), indexOf(y))`
-      val defaultMatchRule = KindedAst.MatchRule(
-        KindedAst.Pattern.Wild(Type.freshVar(Kind.Star, loc), loc),
-        None,
-        KindedAst.Expr.ApplySig(
-          SigSymUse(compareSigSym, loc),
-          List(
-            KindedAst.Expr.ApplyClo(
-              mkVarExpr(lambdaVarSym, loc),
-              mkVarExpr(param1, loc),
-              Type.freshVar(Kind.Star, loc),
-              Type.freshVar(Kind.Eff, loc),
-              loc
-            ),
-            KindedAst.Expr.ApplyClo(
-              mkVarExpr(lambdaVarSym, loc),
-              mkVarExpr(param2, loc),
-              Type.freshVar(Kind.Star, loc),
-              Type.freshVar(Kind.Eff, loc),
-              loc),
-          ),
-          Type.freshVar(Kind.Star, loc),
-          Type.freshVar(Kind.Star, loc),
-          Type.freshVar(Kind.Eff, loc),
+        // Create the lambda mapping tags to indices
+        val lambdaParamVarSym = Symbol.freshVarSym("e", BoundBy.FormalParam, loc)
+        val indexMatchRules = getCasesInStableOrder(cases).zipWithIndex.map { case (caze, index) => mkCompareIndexMatchRule(caze, index, loc) }
+        val indexMatchExp = KindedAst.Expr.Match(mkVarExpr(lambdaParamVarSym, loc), indexMatchRules, loc)
+        val lambda = KindedAst.Expr.Lambda(
+          KindedAst.FormalParam(lambdaParamVarSym, Modifiers.Empty, lambdaParamVarSym.tvar, TypeSource.Ascribed, loc),
+          indexMatchExp,
+          allowSubeffecting = false,
           loc
         )
-      )
 
-      // Wrap the cases in a match expression
-      val matchExp = KindedAst.Expr.Match(
-        KindedAst.Expr.Tuple(List(mkVarExpr(param1, loc), mkVarExpr(param2, loc)), loc),
-        matchRules :+ defaultMatchRule,
-        loc
-      )
+        // Create the main match expression
+        val matchRules = getCasesInStableOrder(cases).map(mkComparePairMatchRule(_, loc, root))
 
-      // Put the expressions together in a let
-      KindedAst.Expr.Let(lambdaVarSym, lambda, matchExp, loc)
+        // Create the default rule:
+        // `case _ => compare(indexOf(x), indexOf(y))`
+        val defaultMatchRule = KindedAst.MatchRule(
+          KindedAst.Pattern.Wild(Type.freshVar(Kind.Star, loc), loc),
+          None,
+          KindedAst.Expr.ApplySig(
+            SigSymUse(compareSigSym, loc),
+            List(
+              KindedAst.Expr.ApplyClo(
+                mkVarExpr(lambdaVarSym, loc),
+                mkVarExpr(param1, loc),
+                Type.freshVar(Kind.Star, loc),
+                Type.freshVar(Kind.Eff, loc),
+                loc
+              ),
+              KindedAst.Expr.ApplyClo(
+                mkVarExpr(lambdaVarSym, loc),
+                mkVarExpr(param2, loc),
+                Type.freshVar(Kind.Star, loc),
+                Type.freshVar(Kind.Eff, loc),
+                loc),
+            ),
+            Type.freshVar(Kind.Star, loc),
+            Type.freshVar(Kind.Star, loc),
+            Type.freshVar(Kind.Eff, loc),
+            loc
+          )
+        )
+
+        // Wrap the cases in a match expression
+        val matchExp = KindedAst.Expr.Match(
+          KindedAst.Expr.Tuple(List(mkVarExpr(param1, loc), mkVarExpr(param2, loc)), loc),
+          matchRules :+ defaultMatchRule,
+          loc
+        )
+
+        // Put the expressions together in a let
+        KindedAst.Expr.Let(lambdaVarSym, lambda, matchExp, loc)
+    }
   }
 
   /**
@@ -393,75 +415,83 @@ object Deriver extends ValidPhasePlugin[KindedAst.Root, KindedAst.Root] {
     * Creates an indexing match rule, mapping the given case to the given index, e.g.
     * `case C2(_, _) => 2`
     */
-  private def mkCompareIndexMatchRule(caze: KindedAst.Case, index: Int, loc: SourceLocation)(implicit Flix: Flix): KindedAst.MatchRule = caze match {
-    case KindedAst.Case(sym, tpes, _, _) =>
-      val pats = tpes.map(_ => KindedAst.Pattern.Wild(Type.freshVar(Kind.Star, loc), loc))
-      val pat = KindedAst.Pattern.Tag(CaseSymUse(sym, loc), pats, Type.freshVar(Kind.Star, loc), loc)
-      val exp = KindedAst.Expr.Cst(Constant.Int32(index), loc)
-      KindedAst.MatchRule(pat, None, exp)
+  private def mkCompareIndexMatchRule(caze: KindedAst.Case, index: Int, loc: SourceLocation)(implicit flix: Flix): KindedAst.MatchRule = {
+    implicit val genSym: GenSym = flix.genSym
+
+    caze match {
+      case KindedAst.Case(sym, tpes, _, _) =>
+        val pats = tpes.map(_ => KindedAst.Pattern.Wild(Type.freshVar(Kind.Star, loc), loc))
+        val pat = KindedAst.Pattern.Tag(CaseSymUse(sym, loc), pats, Type.freshVar(Kind.Star, loc), loc)
+        val exp = KindedAst.Expr.Cst(Constant.Int32(index), loc)
+        KindedAst.MatchRule(pat, None, exp)
+    }
   }
 
   /**
     * Creates a comparison match rule, comparing the elements of two tags of the same type.
     * {{{ case (C2(x0, x1), C2(y0, y1)) => compare(x0, y0) thenCompare lazy(x1, y1) }}}
     */
-  private def mkComparePairMatchRule(caze: KindedAst.Case, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.MatchRule = caze match {
-    case KindedAst.Case(sym, tpes, _, _) =>
-      val equalToSym = PredefinedTraits.lookupCaseSym("Comparison", "EqualTo", root)
-      val compareSigSym = PredefinedTraits.lookupSigSym("Order", "compare", root)
-      val thenCompareDefSym = PredefinedTraits.lookupDefSym(List("Order"), "thenCompare", root)
+  private def mkComparePairMatchRule(caze: KindedAst.Case, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.MatchRule = {
+    implicit val genSym: GenSym = flix.genSym
 
-      // Match on the tuple
-      // `case (C2(x0, x1), C2(y0, y1))
-      val (pat1, varSyms1) = mkPattern(sym, tpes, "x", loc)
-      val (pat2, varSyms2) = mkPattern(sym, tpes, "y", loc)
-      val pat = KindedAst.Pattern.Tuple(List(pat1, pat2), loc)
+    caze match {
+      case KindedAst.Case(sym, tpes, _, _) =>
+        val equalToSym = PredefinedTraits.lookupCaseSym("Comparison", "EqualTo", root)
+        val compareSigSym = PredefinedTraits.lookupSigSym("Order", "compare", root)
+        val thenCompareDefSym = PredefinedTraits.lookupDefSym(List("Order"), "thenCompare", root)
 
-      // Call compare on each variable pair
-      // `compare(x0, y0)`, `compare(x1, y1)`
-      val compares = varSyms1.zip(varSyms2).map {
-        case (varSym1, varSym2) =>
-          KindedAst.Expr.ApplySig(
-            SigSymUse(compareSigSym, loc),
+        // Match on the tuple
+        // `case (C2(x0, x1), C2(y0, y1))
+        val (pat1, varSyms1) = mkPattern(sym, tpes, "x", loc)
+        val (pat2, varSyms2) = mkPattern(sym, tpes, "y", loc)
+        val pat = KindedAst.Pattern.Tuple(List(pat1, pat2), loc)
+
+        // Call compare on each variable pair
+        // `compare(x0, y0)`, `compare(x1, y1)`
+        val compares = varSyms1.zip(varSyms2).map {
+          case (varSym1, varSym2) =>
+            KindedAst.Expr.ApplySig(
+              SigSymUse(compareSigSym, loc),
+              List(
+                mkVarExpr(varSym1, loc),
+                mkVarExpr(varSym2, loc)
+              ),
+              Type.freshVar(Kind.Star, loc),
+              Type.freshVar(Kind.Star, loc),
+              Type.freshVar(Kind.Eff, loc),
+              loc
+            )
+        }
+
+        /**
+         * Joins the two expressions via `Compare.thenCompare`, making the second expression lazy.
+         * (Cannot be inlined due to issues with Scala's type inference.
+         */
+        def thenCompare(exp1: KindedAst.Expr, exp2: KindedAst.Expr): KindedAst.Expr = {
+          KindedAst.Expr.ApplyDef(
+            DefSymUse(thenCompareDefSym, loc),
             List(
-              mkVarExpr(varSym1, loc),
-              mkVarExpr(varSym2, loc)
+              exp1,
+              KindedAst.Expr.Lazy(exp2, loc)
             ),
             Type.freshVar(Kind.Star, loc),
             Type.freshVar(Kind.Star, loc),
             Type.freshVar(Kind.Eff, loc),
             loc
           )
-      }
+        }
 
-      /**
-        * Joins the two expressions via `Compare.thenCompare`, making the second expression lazy.
-        * (Cannot be inlined due to issues with Scala's type inference.
-        */
-      def thenCompare(exp1: KindedAst.Expr, exp2: KindedAst.Expr): KindedAst.Expr = {
-        KindedAst.Expr.ApplyDef(
-          DefSymUse(thenCompareDefSym, loc),
-          List(
-            exp1,
-            KindedAst.Expr.Lazy(exp2, loc)
-          ),
-          Type.freshVar(Kind.Star, loc),
-          Type.freshVar(Kind.Star, loc),
-          Type.freshVar(Kind.Eff, loc),
-          loc
-        )
-      }
+        // Put it all together
+        // compare(x0, y0) `thenCompare` lazy compare(x1, y1)
+        val exp = compares match {
+          // Case 1: no variables to compare; just return true
+          case Nil => KindedAst.Expr.Tag(CaseSymUse(equalToSym, loc), Nil, Type.freshVar(Kind.Star, loc), loc)
+          // Case 2: multiple comparisons to be done; wrap them in Order.thenCompare
+          case cmps => cmps.reduceRight(thenCompare)
+        }
 
-      // Put it all together
-      // compare(x0, y0) `thenCompare` lazy compare(x1, y1)
-      val exp = compares match {
-        // Case 1: no variables to compare; just return true
-        case Nil => KindedAst.Expr.Tag(CaseSymUse(equalToSym, loc), Nil, Type.freshVar(Kind.Star, loc), loc)
-        // Case 2: multiple comparisons to be done; wrap them in Order.thenCompare
-        case cmps => cmps.reduceRight(thenCompare)
-      }
-
-      KindedAst.MatchRule(pat, None, exp)
+        KindedAst.MatchRule(pat, None, exp)
+    }
   }
 
   /**
@@ -487,31 +517,35 @@ object Deriver extends ValidPhasePlugin[KindedAst.Root, KindedAst.Root] {
     * }
     * }}}
     */
-  private def mkToStringInstance(enum0: KindedAst.Enum, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.Instance = enum0 match {
-    case KindedAst.Enum(_, _, _, _, tparams, _, _, tpe, _) =>
-      val toStringTraitSym = PredefinedTraits.lookupTraitSym("ToString", root)
-      val toStringDefSym = Symbol.mkDefnSym("ToString.toString", Some(flix.genSym.freshId()))
+  private def mkToStringInstance(enum0: KindedAst.Enum, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.Instance = {
+    implicit val genSym: GenSym = flix.genSym
 
-      val param = Symbol.freshVarSym("x", BoundBy.FormalParam, loc)
-      val exp = mkToStringImpl(enum0, param, loc, root)
-      val spec = mkToStringSpec(enum0, param, loc, root)
+    enum0 match {
+      case KindedAst.Enum(_, _, _, _, tparams, _, _, tpe, _) =>
+        val toStringTraitSym = PredefinedTraits.lookupTraitSym("ToString", root)
+        val toStringDefSym = Symbol.mkDefnSym("ToString.toString", Some(flix.genSym.freshId()))
 
-      val defn = KindedAst.Def(toStringDefSym, spec, exp, loc)
+        val param = Symbol.freshVarSym("x", BoundBy.FormalParam, loc)
+        val exp = mkToStringImpl(enum0, param, loc, root)
+        val spec = mkToStringSpec(enum0, param, loc, root)
 
-      val tconstrs = getTraitConstraintsForTypeParams(tparams, toStringTraitSym, loc)
+        val defn = KindedAst.Def(toStringDefSym, spec, exp, loc)
 
-      KindedAst.Instance(
-        doc = Doc(Nil, loc),
-        ann = Annotations.Empty,
-        mod = Modifiers.Empty,
-        trt = TraitSymUse(toStringTraitSym, loc),
-        tpe = tpe,
-        tconstrs = tconstrs,
-        assocs = Nil,
-        defs = List(defn),
-        ns = Name.RootNS,
-        loc = loc
-      )
+        val tconstrs = getTraitConstraintsForTypeParams(tparams, toStringTraitSym, loc)
+
+        KindedAst.Instance(
+          doc = Doc(Nil, loc),
+          ann = Annotations.Empty,
+          mod = Modifiers.Empty,
+          trt = TraitSymUse(toStringTraitSym, loc),
+          tpe = tpe,
+          tconstrs = tconstrs,
+          assocs = Nil,
+          defs = List(defn),
+          ns = Name.RootNS,
+          loc = loc
+        )
+    }
   }
 
   /**
@@ -558,46 +592,50 @@ object Deriver extends ValidPhasePlugin[KindedAst.Root, KindedAst.Root] {
   /**
     * Creates a ToString match rule for the given enum case.
     */
-  private def mkToStringMatchRule(caze: KindedAst.Case, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.MatchRule = caze match {
-    case KindedAst.Case(sym, tpes, _, _) =>
-      val toStringSym = PredefinedTraits.lookupSigSym("ToString", "toString", root)
+  private def mkToStringMatchRule(caze: KindedAst.Case, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.MatchRule = {
+    implicit val genSym: GenSym = flix.genSym
 
-      // get a pattern corresponding to this case, e.g.
-      // `case C2(x0, x1)`
-      val (pat, varSyms) = mkPattern(sym, tpes, "x", loc)
+    caze match {
+      case KindedAst.Case(sym, tpes, _, _) =>
+        val toStringSym = PredefinedTraits.lookupSigSym("ToString", "toString", root)
 
-      // "C2"
-      val tagPart = KindedAst.Expr.Cst(Constant.Str(sym.name), loc)
+        // get a pattern corresponding to this case, e.g.
+        // `case C2(x0, x1)`
+        val (pat, varSyms) = mkPattern(sym, tpes, "x", loc)
 
-      // call toString on each variable,
-      // `toString(x0)`, `toString(x1)`
-      val toStrings = varSyms.map {
-        varSym =>
-          KindedAst.Expr.ApplySig(
-            SigSymUse(toStringSym, loc),
-            List(mkVarExpr(varSym, loc)),
-            Type.freshVar(Kind.Star, loc),
-            Type.freshVar(Kind.Star, loc),
-            Type.freshVar(Kind.Eff, loc),
-            loc
-          )
-      }
+        // "C2"
+        val tagPart = KindedAst.Expr.Cst(Constant.Str(sym.name), loc)
 
-      // put commas between the arguments
-      // `toString(x0)`, `", "`, `toString(x1)`
-      val sep = mkStrExpr(", ", loc)
-      val valuePart = intersperse(toStrings, sep)
+        // call toString on each variable,
+        // `toString(x0)`, `toString(x1)`
+        val toStrings = varSyms.map {
+          varSym =>
+            KindedAst.Expr.ApplySig(
+              SigSymUse(toStringSym, loc),
+              List(mkVarExpr(varSym, loc)),
+              Type.freshVar(Kind.Star, loc),
+              Type.freshVar(Kind.Star, loc),
+              Type.freshVar(Kind.Eff, loc),
+              loc
+            )
+        }
 
-      // put it all together
-      // `"C2" + "(" + toString(x0) + ", " + toString(x1) + ")"`
-      val exp = valuePart match {
-        // Case 1: no arguments: just show the tag
-        case Nil => tagPart
-        // Case 2: at least one argument: concatenate the tag with the values wrapped in parens
-        case exps => concatAll(tagPart :: mkStrExpr("(", loc) :: (exps :+ mkStrExpr(")", loc)), loc)
-      }
+        // put commas between the arguments
+        // `toString(x0)`, `", "`, `toString(x1)`
+        val sep = mkStrExpr(", ", loc)
+        val valuePart = intersperse(toStrings, sep)
 
-      KindedAst.MatchRule(pat, None, exp)
+        // put it all together
+        // `"C2" + "(" + toString(x0) + ", " + toString(x1) + ")"`
+        val exp = valuePart match {
+          // Case 1: no arguments: just show the tag
+          case Nil => tagPart
+          // Case 2: at least one argument: concatenate the tag with the values wrapped in parens
+          case exps => concatAll(tagPart :: mkStrExpr("(", loc) :: (exps :+ mkStrExpr(")", loc)), loc)
+        }
+
+        KindedAst.MatchRule(pat, None, exp)
+    }
   }
 
   /**
@@ -623,30 +661,34 @@ object Deriver extends ValidPhasePlugin[KindedAst.Root, KindedAst.Root] {
     * }
     * }}}
     */
-  private def mkHashInstance(enum0: KindedAst.Enum, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.Instance = enum0 match {
-    case KindedAst.Enum(_, _, _, _, tparams, _, _, tpe, _) =>
-      val hashTraitSym = PredefinedTraits.lookupTraitSym("Hash", root)
-      val hashDefSym = Symbol.mkDefnSym("Hash.hash", Some(flix.genSym.freshId()))
+  private def mkHashInstance(enum0: KindedAst.Enum, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.Instance = {
+    implicit val genSym: GenSym = flix.genSym
 
-      val param = Symbol.freshVarSym("x", BoundBy.FormalParam, loc)
-      val exp = mkHashImpl(enum0, param, loc, root)
-      val spec = mkHashSpec(enum0, param, loc, root)
+    enum0 match {
+      case KindedAst.Enum(_, _, _, _, tparams, _, _, tpe, _) =>
+        val hashTraitSym = PredefinedTraits.lookupTraitSym("Hash", root)
+        val hashDefSym = Symbol.mkDefnSym("Hash.hash", Some(flix.genSym.freshId()))
 
-      val defn = KindedAst.Def(hashDefSym, spec, exp, loc)
+        val param = Symbol.freshVarSym("x", BoundBy.FormalParam, loc)
+        val exp = mkHashImpl(enum0, param, loc, root)
+        val spec = mkHashSpec(enum0, param, loc, root)
 
-      val tconstrs = getTraitConstraintsForTypeParams(tparams, hashTraitSym, loc)
-      KindedAst.Instance(
-        doc = Doc(Nil, loc),
-        ann = Annotations.Empty,
-        mod = Modifiers.Empty,
-        trt = TraitSymUse(hashTraitSym, loc),
-        tpe = tpe,
-        tconstrs = tconstrs,
-        defs = List(defn),
-        assocs = Nil,
-        ns = Name.RootNS,
-        loc = loc
-      )
+        val defn = KindedAst.Def(hashDefSym, spec, exp, loc)
+
+        val tconstrs = getTraitConstraintsForTypeParams(tparams, hashTraitSym, loc)
+        KindedAst.Instance(
+          doc = Doc(Nil, loc),
+          ann = Annotations.Empty,
+          mod = Modifiers.Empty,
+          trt = TraitSymUse(hashTraitSym, loc),
+          tpe = tpe,
+          tconstrs = tconstrs,
+          defs = List(defn),
+          assocs = Nil,
+          ns = Name.RootNS,
+          loc = loc
+        )
+    }
   }
 
   /**
@@ -695,42 +737,46 @@ object Deriver extends ValidPhasePlugin[KindedAst.Root, KindedAst.Root] {
   /**
     * Creates a Hash match rule for the given enum case.
     */
-  private def mkHashMatchRule(caze: KindedAst.Case, index: Int, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.MatchRule = caze match {
-    case KindedAst.Case(sym, tpe, _, _) =>
-      val hashSigSym = PredefinedTraits.lookupSigSym("Hash", "hash", root)
-      val combineDefSym = PredefinedTraits.lookupDefSym(List("Hash"), "combine", root)
+  private def mkHashMatchRule(caze: KindedAst.Case, index: Int, loc: SourceLocation, root: KindedAst.Root)(implicit flix: Flix): KindedAst.MatchRule = {
+    implicit val genSym: GenSym = flix.genSym
 
-      // get a pattern corresponding to this case, e.g.
-      // `case C2(x0, x1)`
-      val (pat, varSyms) = mkPattern(sym, tpe, "x", loc)
+    caze match {
+      case KindedAst.Case(sym, tpe, _, _) =>
+        val hashSigSym = PredefinedTraits.lookupSigSym("Hash", "hash", root)
+        val combineDefSym = PredefinedTraits.lookupDefSym(List("Hash"), "combine", root)
 
-      // build a hash code by repeatedly adding elements via the combine function
-      // the first hash is the index + 1
-      // `3 `combine` hash(x0) `combine` hash(y0)`
-      val exp = varSyms.foldLeft(KindedAst.Expr.Cst(Constant.Int32(index + 1), loc): KindedAst.Expr) {
-        case (acc, varSym) =>
-          // `acc `combine` hash(varSym)
-          KindedAst.Expr.ApplyDef(
-            DefSymUse(combineDefSym, loc),
-            List(
-              acc,
-              KindedAst.Expr.ApplySig(
-                SigSymUse(hashSigSym, loc),
-                List(mkVarExpr(varSym, loc)),
-                Type.freshVar(Kind.Star, loc),
-                Type.freshVar(Kind.Star, loc),
-                Type.freshVar(Kind.Eff, loc),
-                loc
+        // get a pattern corresponding to this case, e.g.
+        // `case C2(x0, x1)`
+        val (pat, varSyms) = mkPattern(sym, tpe, "x", loc)
+
+        // build a hash code by repeatedly adding elements via the combine function
+        // the first hash is the index + 1
+        // `3 `combine` hash(x0) `combine` hash(y0)`
+        val exp = varSyms.foldLeft(KindedAst.Expr.Cst(Constant.Int32(index + 1), loc): KindedAst.Expr) {
+          case (acc, varSym) =>
+            // `acc `combine` hash(varSym)
+            KindedAst.Expr.ApplyDef(
+              DefSymUse(combineDefSym, loc),
+              List(
+                acc,
+                KindedAst.Expr.ApplySig(
+                  SigSymUse(hashSigSym, loc),
+                  List(mkVarExpr(varSym, loc)),
+                  Type.freshVar(Kind.Star, loc),
+                  Type.freshVar(Kind.Star, loc),
+                  Type.freshVar(Kind.Eff, loc),
+                  loc
+                ),
               ),
-            ),
-            Type.freshVar(Kind.Star, loc),
-            Type.freshVar(Kind.Star, loc),
-            Type.freshVar(Kind.Eff, loc),
-            loc
-          )
-      }
+              Type.freshVar(Kind.Star, loc),
+              Type.freshVar(Kind.Star, loc),
+              Type.freshVar(Kind.Eff, loc),
+              loc
+            )
+        }
 
-      KindedAst.MatchRule(pat, None, exp)
+        KindedAst.MatchRule(pat, None, exp)
+    }
   }
 
   /**
@@ -754,48 +800,52 @@ object Deriver extends ValidPhasePlugin[KindedAst.Root, KindedAst.Root] {
     *   }
     * }}}
     */
-  private def mkCoerceInstance(enum0: KindedAst.Enum, loc: SourceLocation, root: KindedAst.Root)(implicit sctx: SharedContext, flix: Flix): Option[KindedAst.Instance] = enum0 match {
-    case KindedAst.Enum(_, _, _, sym, _, _, cases, tpe, _) =>
-      if (cases.size == 1) {
-        val coerceTraitSym = PredefinedTraits.lookupTraitSym("Coerce", root)
-        val coerceDefSym = Symbol.mkDefnSym("Coerce.coerce", Some(flix.genSym.freshId()))
+  private def mkCoerceInstance(enum0: KindedAst.Enum, loc: SourceLocation, root: KindedAst.Root)(implicit sctx: SharedContext, flix: Flix): Option[KindedAst.Instance] = {
+    implicit val genSym: GenSym = flix.genSym
 
-        val (_, caze) = cases.head
+    enum0 match {
+      case KindedAst.Enum(_, _, _, sym, _, _, cases, tpe, _) =>
+        if (cases.size == 1) {
+          val coerceTraitSym = PredefinedTraits.lookupTraitSym("Coerce", root)
+          val coerceDefSym = Symbol.mkDefnSym("Coerce.coerce", Some(flix.genSym.freshId()))
 
-        val outSym = new Symbol.AssocTypeSym(coerceTraitSym, "Out", loc)
-        val outTpe = Type.mkTuplish(caze.tpes, loc)
-        val out = KindedAst.AssocTypeDef(
-          Doc(Nil, loc),
-          Modifiers.Empty,
-          AssocTypeSymUse(outSym, loc),
-          tpe,
-          outTpe,
-          loc
-        )
+          val (_, caze) = cases.head
 
-        val param = Symbol.freshVarSym("x", BoundBy.FormalParam, loc)
-        val exp = mkCoerceImpl(enum0, param, loc)
-        val spec = mkCoerceSpec(enum0, param, loc, root)
+          val outSym = new Symbol.AssocTypeSym(coerceTraitSym, "Out", loc)
+          val outTpe = Type.mkTuplish(caze.tpes, loc)
+          val out = KindedAst.AssocTypeDef(
+            Doc(Nil, loc),
+            Modifiers.Empty,
+            AssocTypeSymUse(outSym, loc),
+            tpe,
+            outTpe,
+            loc
+          )
 
-        val defn = KindedAst.Def(coerceDefSym, spec, exp, loc)
+          val param = Symbol.freshVarSym("x", BoundBy.FormalParam, loc)
+          val exp = mkCoerceImpl(enum0, param, loc)
+          val spec = mkCoerceSpec(enum0, param, loc, root)
 
-        Some(KindedAst.Instance(
-          doc = Doc(Nil, loc),
-          ann = Annotations.Empty,
-          mod = Modifiers.Empty,
-          trt = TraitSymUse(coerceTraitSym, loc),
-          tpe = tpe,
-          tconstrs = Nil,
-          defs = List(defn),
-          assocs = List(out),
-          ns = Name.RootNS,
-          loc = loc
-        ))
-      } else {
-        val error = DerivationError.IllegalNonSingletonCoerce(sym, loc)
-        sctx.errors.add(error)
-        None
-      }
+          val defn = KindedAst.Def(coerceDefSym, spec, exp, loc)
+
+          Some(KindedAst.Instance(
+            doc = Doc(Nil, loc),
+            ann = Annotations.Empty,
+            mod = Modifiers.Empty,
+            trt = TraitSymUse(coerceTraitSym, loc),
+            tpe = tpe,
+            tconstrs = Nil,
+            defs = List(defn),
+            assocs = List(out),
+            ns = Name.RootNS,
+            loc = loc
+          ))
+        } else {
+          val error = DerivationError.IllegalNonSingletonCoerce(sym, loc)
+          sctx.errors.add(error)
+          None
+        }
+    }
   }
 
   /**
@@ -890,6 +940,8 @@ object Deriver extends ValidPhasePlugin[KindedAst.Root, KindedAst.Root] {
     * Builds a string concatenation expression from the given expressions.
     */
   private def concat(exp1: KindedAst.Expr, exp2: KindedAst.Expr, loc: SourceLocation)(implicit flix: Flix): KindedAst.Expr = {
+    implicit val genSym: GenSym = flix.genSym
+
     KindedAst.Expr.Binary(SemanticOp.StringOp.Concat, exp1, exp2, Type.freshVar(Kind.Star, loc), loc)
   }
 
@@ -919,6 +971,8 @@ object Deriver extends ValidPhasePlugin[KindedAst.Root, KindedAst.Root] {
     * Creates a pattern corresponding to the given tag type.
     */
   private def mkPattern(sym: Symbol.CaseSym, tpes: List[Type], varPrefix: String, loc: SourceLocation)(implicit flix: Flix): (KindedAst.Pattern, List[Symbol.VarSym]) = {
+    implicit val genSym: GenSym = flix.genSym
+
     val varSyms = tpes.zipWithIndex.map { case (_, index) => Symbol.freshVarSym(s"$varPrefix$index", BoundBy.Pattern, loc) }
     val subPats = varSyms.map(varSym => mkVarPattern(varSym, loc))
     (KindedAst.Pattern.Tag(CaseSymUse(sym, loc), subPats, Type.freshVar(Kind.Star, loc), loc), varSyms)

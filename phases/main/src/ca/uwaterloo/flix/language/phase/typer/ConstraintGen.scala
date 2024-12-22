@@ -16,6 +16,7 @@
 package ca.uwaterloo.flix.language.phase.typer
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.KindedAst.Expr
 import ca.uwaterloo.flix.language.ast.shared.SymUse.{DefSymUse, LocalDefSymUse, SigSymUse}
 import ca.uwaterloo.flix.language.ast.shared.{CheckedCastType, Scope, VarText}
@@ -42,6 +43,8 @@ object ConstraintGen {
     */
   def visitExp(exp0: KindedAst.Expr)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): (Type, Type) = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     exp0 match {
       case Expr.Var(sym, _) =>
         val resTpe = sym.tvar
@@ -973,6 +976,8 @@ object ConstraintGen {
     */
   def visitPattern(pat0: KindedAst.Pattern)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): Type = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     pat0 match {
       case KindedAst.Pattern.Wild(tvar, _) => tvar
 
@@ -1162,6 +1167,8 @@ object ConstraintGen {
     */
   private def visitDefaultRule(exp0: Option[KindedAst.Expr], loc: SourceLocation)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): (Type, Type) = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     exp0 match {
       case None => (Type.freshVar(Kind.Star, loc), Type.Pure)
       case Some(exp) => visitExp(exp)
@@ -1231,6 +1238,8 @@ object ConstraintGen {
     */
   private def getDoType(op: KindedAst.Op)(implicit c: TypeContext, flix: Flix): Type = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     // We special-case the result type of the operation.
     op.spec.tpe.typeConstructor match {
       case Some(TypeConstructor.Void) =>
@@ -1253,6 +1262,8 @@ object ConstraintGen {
     */
   private def instantiateStruct(sym: Symbol.StructSym, structs: Map[Symbol.StructSym, KindedAst.Struct])(implicit c: TypeContext, flix: Flix): (Map[Symbol.StructFieldSym, (Boolean, Type)], Type, Type.Var) = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     val struct = structs(sym)
     assert(struct.tparams.last.sym.kind == Kind.Eff)
     val fields = struct.fields

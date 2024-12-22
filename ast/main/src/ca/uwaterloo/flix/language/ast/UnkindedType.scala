@@ -15,10 +15,9 @@
  */
 package ca.uwaterloo.flix.language.ast
 
-import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.shared.ScalaAnnotations.EliminatedBy
 import ca.uwaterloo.flix.language.ast.shared.*
-import ca.uwaterloo.flix.language.phase.Resolver
 import ca.uwaterloo.flix.util.InternalCompilerException
 
 import java.util.Objects
@@ -169,7 +168,6 @@ object UnkindedType {
     * An unapplied alias.
     * Only exists temporarily in the Resolver until it's converted to an [[Alias]].
     */
-  @EliminatedBy(Resolver.getClass)
   case class UnappliedAlias(sym: Symbol.TypeAliasSym, loc: SourceLocation) extends UnkindedType {
     override def equals(that: Any): Boolean = that match {
       case UnappliedAlias(sym2, _) => sym == sym2
@@ -183,7 +181,6 @@ object UnkindedType {
     * An unapplied associated type.
     * Only exists temporarily in the Resolver until it's converted to an [[AssocType]].
     */
-  @EliminatedBy(Resolver.getClass)
   case class UnappliedAssocType(sym: Symbol.AssocTypeSym, loc: SourceLocation) extends UnkindedType {
     override def equals(that: Any): Boolean = that match {
       case UnappliedAssocType(sym2, _) => sym == sym2
@@ -316,7 +313,7 @@ object UnkindedType {
   /**
     * Returns a fresh type variable of the given kind `k` and rigidity `r`.
     */
-  def freshVar(loc: SourceLocation, isRegion: Boolean = false, text: VarText = VarText.Absent)(implicit scope: Scope, flix: Flix): UnkindedType.Var = {
+  def freshVar(loc: SourceLocation, isRegion: Boolean = false, text: VarText = VarText.Absent)(implicit scope: Scope, genSym: GenSym): UnkindedType.Var = {
     val sym = Symbol.freshUnkindedTypeVarSym(text, isRegion, loc)
     UnkindedType.Var(sym, loc)
   }

@@ -1,10 +1,9 @@
 package ca.uwaterloo.flix.language.errors
 
-import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.shared.SecurityContext
 import ca.uwaterloo.flix.language.ast.{SourceLocation, Symbol, Type}
-import ca.uwaterloo.flix.language.fmt.FormatType
+import ca.uwaterloo.flix.language.fmt.{FormatType, FormatOptions}
 import ca.uwaterloo.flix.util.Formatter
 
 /** A common super-type for safety errors. */
@@ -38,7 +37,7 @@ object SafetyError {
     * @param to   the destination type.
     * @param loc  the source location of the cast.
     */
-  case class IllegalCheckedCast(from: Type, to: Type, loc: SourceLocation)(implicit flix: Flix) extends SafetyError {
+  case class IllegalCheckedCast(from: Type, to: Type, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends SafetyError {
     override def summary: String = "Illegal checked cast"
 
     override def message(formatter: Formatter): String = {
@@ -60,7 +59,7 @@ object SafetyError {
     * @param to   the destination type.
     * @param loc  the source location of the cast.
     */
-  case class IllegalCheckedCastFromNonJava(from: Type, to: java.lang.Class[?], loc: SourceLocation)(implicit flix: Flix) extends SafetyError {
+  case class IllegalCheckedCastFromNonJava(from: Type, to: java.lang.Class[?], loc: SourceLocation)(implicit formatOptions: FormatOptions) extends SafetyError {
     override def summary: String = "Illegal checked cast: Attempt to cast a non-Java type to a Java type."
 
     override def message(formatter: Formatter): String = {
@@ -82,7 +81,7 @@ object SafetyError {
     * @param to   the destination type.
     * @param loc  the source location of the cast.
     */
-  case class IllegalCheckedCastFromVar(from: Type.Var, to: Type, loc: SourceLocation)(implicit flix: Flix) extends SafetyError {
+  case class IllegalCheckedCastFromVar(from: Type.Var, to: Type, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends SafetyError {
     override def summary: String = "Illegal checked cast: Attempt to cast a type variable to a type."
 
     override def message(formatter: Formatter): String = {
@@ -104,7 +103,7 @@ object SafetyError {
     * @param to   the destination type.
     * @param loc  the source location of the cast.
     */
-  case class IllegalCheckedCastToNonJava(from: java.lang.Class[?], to: Type, loc: SourceLocation)(implicit flix: Flix) extends SafetyError {
+  case class IllegalCheckedCastToNonJava(from: java.lang.Class[?], to: Type, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends SafetyError {
     override def summary: String = "Illegal checked cast: Attempt to cast a Java type to a non-Java type."
 
     override def message(formatter: Formatter): String = {
@@ -126,7 +125,7 @@ object SafetyError {
     * @param to   the destination type (the variable).
     * @param loc  the source location of the cast.
     */
-  case class IllegalCheckedCastToVar(from: Type, to: Type.Var, loc: SourceLocation)(implicit flix: Flix) extends SafetyError {
+  case class IllegalCheckedCastToVar(from: Type, to: Type.Var, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends SafetyError {
     override def summary: String = "Illegal checked cast: Attempt to cast a type to a type variable."
 
     override def message(formatter: Formatter): String = {
@@ -147,7 +146,7 @@ object SafetyError {
     * @param eff the illegal effect.
     * @param loc the source location of the method.
     */
-  case class IllegalMethodEffect(eff: Type, loc: SourceLocation)(implicit flix: Flix) extends SafetyError {
+  case class IllegalMethodEffect(eff: Type, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends SafetyError {
     override def summary: String = "Illegal method effect"
 
     override def message(formatter: Formatter): String = {
@@ -165,7 +164,7 @@ object SafetyError {
     * @param eff the illegal effect.
     * @param loc the source location of the spawn.
     */
-  case class IllegalSpawnEffect(eff: Type, loc: SourceLocation)(implicit flix: Flix) extends SafetyError {
+  case class IllegalSpawnEffect(eff: Type, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends SafetyError {
     override def summary: String = "Illegal spawn effect"
 
     override def message(formatter: Formatter): String = {
@@ -340,7 +339,7 @@ object SafetyError {
     * @param to   the destination type.
     * @param loc  the source location of the cast.
     */
-  case class ImpossibleUncheckedCast(from: Type, to: Type, loc: SourceLocation)(implicit flix: Flix) extends SafetyError {
+  case class ImpossibleUncheckedCast(from: Type, to: Type, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends SafetyError {
     override def summary: String = "Impossible cast."
 
     override def message(formatter: Formatter): String = {

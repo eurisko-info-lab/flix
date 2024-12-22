@@ -15,7 +15,6 @@
  */
 package ca.uwaterloo.flix.language.fmt
 
-import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.ast.shared.TraitConstraint
 
 object FormatTraitConstraint {
@@ -23,8 +22,8 @@ object FormatTraitConstraint {
   /**
     * Formats the given `tconstr` as `Class[Param]`.
     */
-  def formatTraitConstraint(tconstr: TraitConstraint)(implicit flix: Flix): String = {
-    formatTraitConstraintWithOptions(tconstr, flix.getFormatOptions)
+  def formatTraitConstraint(tconstr: TraitConstraint)(implicit formatOptions: FormatOptions): String = {
+    formatTraitConstraintWithOptions(tconstr, formatOptions)
   }
 
   /**

@@ -19,13 +19,16 @@ import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.api.lsp.acceptors.FileAcceptor
 import ca.uwaterloo.flix.api.lsp.{Consumer, Visitor}
 import ca.uwaterloo.flix.api.lsp.provider.completion.Completion.PredicateCompletion
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.TypedAst.Root
 import ca.uwaterloo.flix.language.ast.{Name, Type, TypeConstructor, TypedAst}
-import ca.uwaterloo.flix.language.fmt.FormatType
+import ca.uwaterloo.flix.language.fmt.{FormatType, FormatOptions}
 
 object PredicateCompleter {
 
   def getCompletions(ctx: CompletionContext)(implicit root: Root, flix: Flix): Iterable[PredicateCompletion] = {
+    implicit val genSym: GenSym = flix.genSym
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
 
     //
     // Find all predicates together with their type and source location.

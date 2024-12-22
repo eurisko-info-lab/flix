@@ -19,9 +19,10 @@ import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.ops.TypedAstOps
 import ca.uwaterloo.flix.language.ast.shared.{Instance, Scope}
-import ca.uwaterloo.flix.language.ast.{ChangeSet, RigidityEnv, Scheme, Symbol, Type, TypeConstructor, TypedAst}
+import ca.uwaterloo.flix.language.ast.{ChangeSet, RigidityEnv, Scheme, SchemeEquality, Symbol, Type, TypeConstructor, TypedAst}
 import ca.uwaterloo.flix.language.dbg.AstPrinter.DebugTypedAst
 import ca.uwaterloo.flix.language.errors.InstanceError
+import ca.uwaterloo.flix.language.fmt.FormatOptions
 import ca.uwaterloo.flix.language.phase.unification.*
 import ca.uwaterloo.flix.util.collection.ListOps
 import ca.uwaterloo.flix.util.{InternalCompilerException, ParOps, Result}
@@ -91,14 +92,18 @@ object Instances extends ValidWithCachePhasePlugin[TypedAst.Root, TypedAst.Root]
     * * The trait's companion namespace.
     * * The same namespace as its type.
     */
-  private def checkOrphan(inst: TypedAst.Instance)(implicit flix: Flix): List[InstanceError] = inst match {
-    case TypedAst.Instance(_, _, _, trt, tpe, _, _, _, ns, _) => tpe.typeConstructor match {
-      // Case 1: Enum type in the same namespace as the instance: not an orphan
-      case Some(TypeConstructor.Enum(enumSym, _)) if enumSym.namespace == ns.idents.map(_.name) => Nil
-      // Case 2: Any type in the trait namespace: not an orphan
-      case _ if trt.sym.namespace == ns.idents.map(_.name) => Nil
-      // Case 3: Any type outside the trait companion namespace and enum declaration namespace: orphan
-      case _ => List(InstanceError.OrphanInstance(trt.sym, tpe, trt.loc))
+  private def checkOrphan(inst: TypedAst.Instance)(implicit flix: Flix): List[InstanceError] = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
+    inst match {
+      case TypedAst.Instance(_, _, _, trt, tpe, _, _, _, ns, _) => tpe.typeConstructor match {
+        // Case 1: Enum type in the same namespace as the instance: not an orphan
+        case Some(TypeConstructor.Enum(enumSym, _)) if enumSym.namespace == ns.idents.map(_.name) => Nil
+        // Case 2: Any type in the trait namespace: not an orphan
+        case _ if trt.sym.namespace == ns.idents.map(_.name) => Nil
+        // Case 3: Any type outside the trait companion namespace and enum declaration namespace: orphan
+        case _ => List(InstanceError.OrphanInstance(trt.sym, tpe, trt.loc))
+      }
     }
   }
 
@@ -107,36 +112,40 @@ object Instances extends ValidWithCachePhasePlugin[TypedAst.Root, TypedAst.Root]
     * * all type variables are unique
     * * all type arguments are variables
     */
-  private def checkSimple(inst: TypedAst.Instance)(implicit flix: Flix): List[InstanceError] = inst match {
-    case TypedAst.Instance(_, _, _, trt, tpe, _, _, _, _, _) => tpe match {
-      case _: Type.Cst => Nil
-      case _: Type.Var => List(InstanceError.ComplexInstance(tpe, trt.sym, trt.loc))
-      case _: Type.Apply =>
-        // ensure that the head is a concrete type
-        val headErrs = tpe.typeConstructor match {
-          case None => List(InstanceError.ComplexInstance(tpe, trt.sym, trt.loc))
-          case Some(_) => Nil
-        }
-        val (_, errs0) = tpe.typeArguments.foldLeft((List.empty[Type.Var], List.empty[InstanceError])) {
-          // Case 1: Type variable
-          case ((seen, errs), tvar: Type.Var) =>
-            // Case 1.1 We've seen it already. Error.
-            if (seen.contains(tvar))
-              (seen, List(InstanceError.DuplicateTypeVar(tvar, trt.sym, trt.loc)))
-            // Case 1.2 We haven't seen it before. Add it to the list.
-            else
-              (tvar :: seen, errs)
-          // Case 2: Non-variable. Error.
-          case ((seen, errs), _) => (seen, InstanceError.ComplexInstance(tpe, trt.sym, trt.loc) :: errs)
-        }
-        headErrs ::: errs0
+  private def checkSimple(inst: TypedAst.Instance)(implicit flix: Flix): List[InstanceError] = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
 
-      case Type.Alias(alias, _, _, _) => List(InstanceError.IllegalTypeAliasInstance(alias.sym, trt.sym, trt.loc))
-      case Type.AssocType(assoc, _, _, loc) => List(InstanceError.IllegalAssocTypeInstance(assoc.sym, trt.sym, loc))
+    inst match {
+      case TypedAst.Instance(_, _, _, trt, tpe, _, _, _, _, _) => tpe match {
+        case _: Type.Cst => Nil
+        case _: Type.Var => List(InstanceError.ComplexInstance(tpe, trt.sym, trt.loc))
+        case _: Type.Apply =>
+          // ensure that the head is a concrete type
+          val headErrs = tpe.typeConstructor match {
+            case None => List(InstanceError.ComplexInstance(tpe, trt.sym, trt.loc))
+            case Some(_) => Nil
+          }
+          val (_, errs0) = tpe.typeArguments.foldLeft((List.empty[Type.Var], List.empty[InstanceError])) {
+            // Case 1: Type variable
+            case ((seen, errs), tvar: Type.Var) =>
+              // Case 1.1 We've seen it already. Error.
+              if (seen.contains(tvar))
+                (seen, List(InstanceError.DuplicateTypeVar(tvar, trt.sym, trt.loc)))
+              // Case 1.2 We haven't seen it before. Add it to the list.
+              else
+                (tvar :: seen, errs)
+            // Case 2: Non-variable. Error.
+            case ((seen, errs), _) => (seen, InstanceError.ComplexInstance(tpe, trt.sym, trt.loc) :: errs)
+          }
+          headErrs ::: errs0
 
-      case Type.JvmToType(_, loc) => throw InternalCompilerException("unexpected JVM type in instance declaration", loc)
-      case Type.JvmToEff(_, loc) => throw InternalCompilerException("unexpected JVM eff in instance declaration", loc)
-      case Type.UnresolvedJvmType(_, loc) => throw InternalCompilerException("unexpected JVM type in instance declaration", loc)
+        case Type.Alias(alias, _, _, _) => List(InstanceError.IllegalTypeAliasInstance(alias.sym, trt.sym, trt.loc))
+        case Type.AssocType(assoc, _, _, loc) => List(InstanceError.IllegalAssocTypeInstance(assoc.sym, trt.sym, loc))
+
+        case Type.JvmToType(_, loc) => throw InternalCompilerException("unexpected JVM type in instance declaration", loc)
+        case Type.JvmToEff(_, loc) => throw InternalCompilerException("unexpected JVM eff in instance declaration", loc)
+        case Type.UnresolvedJvmType(_, loc) => throw InternalCompilerException("unexpected JVM type in instance declaration", loc)
+      }
     }
   }
 
@@ -167,6 +176,8 @@ object Instances extends ValidWithCachePhasePlugin[TypedAst.Root, TypedAst.Root]
     * Checks that every signature in `trt` is implemented in `inst`, and that `inst` does not have any extraneous definitions.
     */
   private def checkSigMatch(inst: TypedAst.Instance, root: TypedAst.Root)(implicit flix: Flix): List[InstanceError] = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     val trt = root.traits(inst.trt.sym)
 
     // Step 1: check that each signature has an implementation.
@@ -183,8 +194,8 @@ object Instances extends ValidWithCachePhasePlugin[TypedAst.Root, TypedAst.Root]
           case (Some(defn), Some(_)) if !defn.spec.mod.isOverride => List(InstanceError.UnmarkedOverride(defn.sym, defn.sym.loc))
           // Case 5: there is an implementation with the right modifier
           case (Some(defn), _) =>
-            val expectedScheme = Scheme.partiallyInstantiate(sig.spec.declaredScheme, trt.tparam.sym, inst.tpe, defn.sym.loc)(Scope.Top, flix)
-            if (Scheme.equal(expectedScheme, defn.spec.declaredScheme, TraitEnv(root.traitEnv), root.eqEnv)) {
+            val expectedScheme = SchemeEquality.partiallyInstantiate(sig.spec.declaredScheme, trt.tparam.sym, inst.tpe, defn.sym.loc)(Scope.Top)
+            if (SchemeEquality.equal(expectedScheme, defn.spec.declaredScheme, TraitEnv(root.traitEnv), root.eqEnv)) {
               // Case 5.1: the schemes match. Success!
               Nil
             } else {
@@ -223,30 +234,34 @@ object Instances extends ValidWithCachePhasePlugin[TypedAst.Root, TypedAst.Root]
     * Checks that there is an instance for each super trait of the trait of `inst`,
     * and that the constraints on `inst` entail the constraints on the super instance.
     */
-  private def checkSuperInstances(inst: TypedAst.Instance, root: TypedAst.Root)(implicit flix: Flix): List[InstanceError] = inst match {
-    case TypedAst.Instance(_, _, _, trt, tpe, tconstrs, _, _, _, _) =>
-      val superTraits = root.traitEnv(trt.sym).superTraits
-      superTraits flatMap {
-        superTrait =>
-          // Find the instance of the super trait matching the type of this instance.
-          findInstanceForType(tpe, superTrait, root) match {
-            case Some((superInst, subst)) =>
-              // Case 1: An instance matches. Check that its constraints are entailed by this instance.
-              superInst.tconstrs flatMap {
-                tconstr =>
-                  TraitEnvironment.entail(tconstrs.map(subst.apply), subst(tconstr), TraitEnv(root.traitEnv), root.eqEnv).toResult match {
-                    case Result.Ok(_) => Nil
-                    case Result.Err(errors) => errors.map {
-                      case UnificationError.NoMatchingInstance(missingTconstr) => InstanceError.MissingTraitConstraint(missingTconstr, superTrait, trt.loc)
-                      case _ => throw InternalCompilerException("Unexpected unification error", inst.loc)
-                    }.toList
-                  }
-              }
-            case None =>
-              // Case 2: No instance matches. Error.
-              List(InstanceError.MissingSuperTraitInstance(tpe, trt.sym, superTrait, trt.loc))
-          }
-      }
+  private def checkSuperInstances(inst: TypedAst.Instance, root: TypedAst.Root)(implicit flix: Flix): List[InstanceError] = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
+    inst match {
+      case TypedAst.Instance(_, _, _, trt, tpe, tconstrs, _, _, _, _) =>
+        val superTraits = root.traitEnv(trt.sym).superTraits
+        superTraits flatMap {
+          superTrait =>
+            // Find the instance of the super trait matching the type of this instance.
+            findInstanceForType(tpe, superTrait, root) match {
+              case Some((superInst, subst)) =>
+                // Case 1: An instance matches. Check that its constraints are entailed by this instance.
+                superInst.tconstrs flatMap {
+                  tconstr =>
+                    TraitEnvironment.entail(tconstrs.map(subst.apply), subst(tconstr), TraitEnv(root.traitEnv), root.eqEnv).toResult match {
+                      case Result.Ok(_) => Nil
+                      case Result.Err(errors) => errors.map {
+                        case UnificationError.NoMatchingInstance(missingTconstr) => InstanceError.MissingTraitConstraint(missingTconstr, superTrait, trt.loc)
+                        case _ => throw InternalCompilerException("Unexpected unification error", inst.loc)
+                      }.toList
+                    }
+                }
+              case None =>
+                // Case 2: No instance matches. Error.
+                List(InstanceError.MissingSuperTraitInstance(tpe, trt.sym, superTrait, trt.loc))
+            }
+        }
+    }
   }
 
   /**

@@ -16,6 +16,7 @@
 package ca.uwaterloo.flix.language.phase.typer
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.*
 import ca.uwaterloo.flix.language.ast.shared.{AssocTypeConstructor, Denotation, Scope, TraitConstraint}
 import ca.uwaterloo.flix.language.phase.typer.ConstraintGen.{visitExp, visitPattern}
@@ -25,6 +26,8 @@ object SchemaConstraintGen {
 
   def visitFixpointConstraintSet(e: KindedAst.Expr.FixpointConstraintSet)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): (Type, Type) = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     e match {
       case KindedAst.Expr.FixpointConstraintSet(cs, tvar, loc) =>
         val constraintTypes = cs.map(visitConstraint)
@@ -39,6 +42,8 @@ object SchemaConstraintGen {
 
   def visitFixpointLambda(e: KindedAst.Expr.FixpointLambda)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): (Type, Type) = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     e match {
       case KindedAst.Expr.FixpointLambda(pparams, exp, tvar, loc) =>
 
@@ -98,6 +103,8 @@ object SchemaConstraintGen {
 
   def visitFixpointFilter(e: KindedAst.Expr.FixpointFilter)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): (Type, Type) = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     e match {
       case KindedAst.Expr.FixpointFilter(pred, exp, tvar, loc) =>
         //
@@ -120,6 +127,8 @@ object SchemaConstraintGen {
 
   def visitFixpointInject(e: KindedAst.Expr.FixpointInject)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): (Type, Type) = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     e match {
       case KindedAst.Expr.FixpointInject(exp, pred, tvar, evar, loc) =>
         //
@@ -154,6 +163,8 @@ object SchemaConstraintGen {
 
   def visitFixpointProject(e: KindedAst.Expr.FixpointProject)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): (Type, Type) = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     e match {
       case KindedAst.Expr.FixpointProject(pred, exp1, exp2, tvar, loc) =>
         //
@@ -179,6 +190,8 @@ object SchemaConstraintGen {
 
   private def visitConstraint(con0: KindedAst.Constraint)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): Type = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     val KindedAst.Constraint(cparams, head0, body0, loc) = con0
     //
     //  A_0 : tpe, A_1: tpe, ..., A_n : tpe
@@ -200,6 +213,8 @@ object SchemaConstraintGen {
     */
   private def visitHeadPredicate(head: KindedAst.Predicate.Head)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): Type = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     head match {
       case KindedAst.Predicate.Head.Atom(pred, den, terms, tvar, loc) =>
         // Adds additional type constraints if the denotation is a lattice.
@@ -219,6 +234,8 @@ object SchemaConstraintGen {
     */
   private def visitBodyPredicate(body0: KindedAst.Predicate.Body)(implicit c: TypeContext, root: KindedAst.Root, flix: Flix): Type = {
     implicit val scope: Scope = c.getScope
+    implicit val genSym: GenSym = flix.genSym
+
     body0 match {
       case KindedAst.Predicate.Body.Atom(pred, den, polarity, fixity, terms, tvar, loc) =>
         val restRow = Type.freshVar(Kind.SchemaRow, loc)
@@ -292,5 +309,9 @@ object SchemaConstraintGen {
   }
 
 
-  private def mkAnySchemaRowType(loc: SourceLocation)(implicit scope: Scope, flix: Flix): Type = Type.freshVar(Kind.SchemaRow, loc)
+  private def mkAnySchemaRowType(loc: SourceLocation)(implicit scope: Scope, flix: Flix): Type = {
+    implicit val genSym: GenSym = flix.genSym
+
+    Type.freshVar(Kind.SchemaRow, loc)
+  }
 }

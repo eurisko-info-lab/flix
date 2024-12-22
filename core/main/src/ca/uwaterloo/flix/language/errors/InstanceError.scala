@@ -16,11 +16,10 @@
 
 package ca.uwaterloo.flix.language.errors
 
-import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.shared.TraitConstraint
 import ca.uwaterloo.flix.language.ast.{Scheme, SourceLocation, Symbol, Type}
-import ca.uwaterloo.flix.language.fmt.{FormatScheme, FormatTraitConstraint, FormatType}
+import ca.uwaterloo.flix.language.fmt.{FormatScheme, FormatTraitConstraint, FormatType, FormatOptions}
 import ca.uwaterloo.flix.util.Formatter
 
 /**
@@ -39,7 +38,7 @@ object InstanceError {
     * @param sym the trait symbol.
     * @param loc the location where the error occurred.
     */
-  case class ComplexInstance(tpe: Type, sym: Symbol.TraitSym, loc: SourceLocation)(implicit flix: Flix) extends InstanceError {
+  case class ComplexInstance(tpe: Type, sym: Symbol.TraitSym, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends InstanceError {
     override def summary: String = "Complex instance type."
 
     def message(formatter: Formatter): String = {
@@ -60,7 +59,7 @@ object InstanceError {
     * @param sym  the trait symbol.
     * @param loc  the location where the error occurred.
     */
-  case class DuplicateTypeVar(tvar: Type.Var, sym: Symbol.TraitSym, loc: SourceLocation)(implicit flix: Flix) extends InstanceError {
+  case class DuplicateTypeVar(tvar: Type.Var, sym: Symbol.TraitSym, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends InstanceError {
     override def summary: String = "Duplicate type variable."
 
     def message(formatter: Formatter): String = {
@@ -173,7 +172,7 @@ object InstanceError {
     * @param expected the scheme of the signature
     * @param actual   the scheme of the definition
     */
-  case class MismatchedSignatures(sigSym: Symbol.SigSym, loc: SourceLocation, expected: Scheme, actual: Scheme)(implicit flix: Flix) extends InstanceError {
+  case class MismatchedSignatures(sigSym: Symbol.SigSym, loc: SourceLocation, expected: Scheme, actual: Scheme)(implicit formatOptions: FormatOptions) extends InstanceError {
     def summary: String = "Mismatched signature."
 
     def message(formatter: Formatter): String = {
@@ -224,7 +223,7 @@ object InstanceError {
     * @param superTrait the symbol of the super trait.
     * @param loc        the location where the error occurred.
     */
-  case class MissingSuperTraitInstance(tpe: Type, subTrait: Symbol.TraitSym, superTrait: Symbol.TraitSym, loc: SourceLocation)(implicit flix: Flix) extends InstanceError {
+  case class MissingSuperTraitInstance(tpe: Type, subTrait: Symbol.TraitSym, superTrait: Symbol.TraitSym, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends InstanceError {
     override def summary: String = s"Missing super trait instance '$superTrait'."
 
     def message(formatter: Formatter): String = {
@@ -252,7 +251,7 @@ object InstanceError {
     * @param superTrait the supertrait that is the source of the constraint.
     * @param loc        the location where the error occurred.
     */
-  case class MissingTraitConstraint(tconstr: TraitConstraint, superTrait: Symbol.TraitSym, loc: SourceLocation)(implicit flix: Flix) extends InstanceError {
+  case class MissingTraitConstraint(tconstr: TraitConstraint, superTrait: Symbol.TraitSym, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends InstanceError {
     override def summary: String = s"Missing type constraint: ${FormatTraitConstraint.formatTraitConstraint(tconstr)}"
 
     override def message(formatter: Formatter): String = {
@@ -278,7 +277,7 @@ object InstanceError {
     * @param tpe the instance type.
     * @param loc the location where the error occurred.
     */
-  case class OrphanInstance(sym: Symbol.TraitSym, tpe: Type, loc: SourceLocation)(implicit flix: Flix) extends InstanceError {
+  case class OrphanInstance(sym: Symbol.TraitSym, tpe: Type, loc: SourceLocation)(implicit formatOptions: FormatOptions) extends InstanceError {
     override def summary: String = "Orphan instance."
 
     def message(formatter: Formatter): String = {

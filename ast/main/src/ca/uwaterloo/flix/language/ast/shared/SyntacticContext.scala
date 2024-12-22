@@ -15,9 +15,6 @@
  */
 package ca.uwaterloo.flix.language.ast.shared
 
-import ca.uwaterloo.flix.language.ast.Name
-import ca.uwaterloo.flix.language.errors.ResolutionError
-
 /**
   * A common super-type for syntactic contexts.
   *

@@ -16,9 +16,11 @@
 package ca.uwaterloo.flix.language.phase.typer
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.ast.{Kind, KindedAst, RigidityEnv, SourceLocation, Symbol, Type, TypeConstructor}
 import ca.uwaterloo.flix.language.errors.TypeError
+import ca.uwaterloo.flix.language.fmt.FormatOptions
 import ca.uwaterloo.flix.language.phase.typer.TypeConstraint.Provenance
 import ca.uwaterloo.flix.language.phase.unification.*
 import ca.uwaterloo.flix.util.Result.Err
@@ -488,6 +490,8 @@ object ConstraintSolver {
     * Constructs a specific missing instance error for the given trait symbol `sym` and type `tpe`.
     */
   def mkMissingInstance(sym: Symbol.TraitSym, tpe: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix): TypeError = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     val eqSym = Symbol.mkTraitSym("Eq")
     val orderSym = Symbol.mkTraitSym("Order")
     val toStringSym = Symbol.mkTraitSym("ToString")
@@ -526,16 +530,20 @@ object ConstraintSolver {
     * doesn't happen inside tuples or other such nesting.
     */
   private def openOuterSchema(tpe: Type)(implicit scope: Scope, flix: Flix): Type = {
+    implicit val genSym: GenSym = flix.genSym
+
     @tailrec
-    def transformRow(tpe: Type, acc: Type => Type): Type = tpe match {
-      case Type.Cst(TypeConstructor.SchemaRowEmpty, loc) =>
-        acc(Type.freshVar(TypeConstructor.SchemaRowEmpty.kind, loc))
-      case Type.Apply(Type.Apply(Type.Cst(TypeConstructor.SchemaRowExtend(pred), loc1), tpe1, loc2), rest, loc3) =>
-        transformRow(rest, inner =>
-          // copy into acc, just replacing `rest` with `inner`
-          acc(Type.Apply(Type.Apply(Type.Cst(TypeConstructor.SchemaRowExtend(pred), loc1), tpe1, loc2), inner, loc3))
-        )
-      case other => acc(other)
+    def transformRow(tpe: Type, acc: Type => Type): Type = {
+      tpe match {
+        case Type.Cst(TypeConstructor.SchemaRowEmpty, loc) =>
+          acc(Type.freshVar(TypeConstructor.SchemaRowEmpty.kind, loc))
+        case Type.Apply(Type.Apply(Type.Cst(TypeConstructor.SchemaRowExtend(pred), loc1), tpe1, loc2), rest, loc3) =>
+          transformRow(rest, inner =>
+            // copy into acc, just replacing `rest` with `inner`
+            acc(Type.Apply(Type.Apply(Type.Cst(TypeConstructor.SchemaRowExtend(pred), loc1), tpe1, loc2), inner, loc3))
+          )
+        case other => acc(other)
+      }
     }
 
     tpe match {
@@ -592,6 +600,8 @@ object ConstraintSolver {
   // TODO ASSOC-TYPES because provenance is not propogated properly.
   // TODO ASSOC-TYPES We also need to track the renv for use in these errors.
   private def toTypeError(err0: UnificationError, prov: Provenance)(implicit flix: Flix): TypeError = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     // TODO LEVELS Top is probably OK?
     implicit val scope: Scope = Scope.Top
     (err0, prov) match {

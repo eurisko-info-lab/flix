@@ -21,6 +21,7 @@ import ca.uwaterloo.flix.api.lsp.consumers.StackConsumer
 import ca.uwaterloo.flix.api.lsp.{Position, Visitor}
 import ca.uwaterloo.flix.language.ast.shared.Scope
 import ca.uwaterloo.flix.language.ast.{Kind, RigidityEnv, SourceLocation, Symbol, Type, TypedAst}
+import ca.uwaterloo.flix.language.fmt.FormatOptions
 import ca.uwaterloo.flix.language.phase.unification.Unification
 
 object HoleCompletion {
@@ -54,10 +55,12 @@ object HoleCompletion {
     * the candidates would include `List.toString : List[a] -> String` and  `List.join : (String, List[String]) -> String`
     */
   private def candidates(sourceType: Type, targetType: Type, root: TypedAst.Root)(implicit flix: Flix): List[Symbol.DefnSym] = {
+    implicit val formatOptions: FormatOptions = flix.getFormatOptions
+
     // Top scope is used since we're comparing with declarations, which are at the top scope.
     val matchType = Type.mkArrowWithEffect(
       sourceType,
-      Type.freshVar(Kind.Eff, SourceLocation.Unknown)(Scope.Top, flix),
+      Type.freshVar(Kind.Eff, SourceLocation.Unknown)(Scope.Top, flix.genSym),
       targetType,
       SourceLocation.Unknown
     )

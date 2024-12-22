@@ -16,7 +16,7 @@
 
 package ca.uwaterloo.flix.language.ast
 
-import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.GenSym
 import ca.uwaterloo.flix.language.ast.shared.*
 import ca.uwaterloo.flix.language.fmt.{FormatOptions, FormatType}
 import ca.uwaterloo.flix.util.InternalCompilerException
@@ -672,7 +672,7 @@ object Type {
   /**
     * Returns a fresh type variable of the given kind `k` and rigidity `r`.
     */
-  def freshVar(k: Kind, loc: SourceLocation, isRegion: Boolean = false, text: VarText = VarText.Absent)(implicit scope: Scope, flix: Flix): Type.Var = {
+  def freshVar(k: Kind, loc: SourceLocation, isRegion: Boolean = false, text: VarText = VarText.Absent)(implicit scope: Scope, genSym: GenSym): Type.Var = {
     val sym = Symbol.freshKindedTypeVarSym(text, k, isRegion, loc)
     Type.Var(sym, loc)
   }
@@ -680,8 +680,8 @@ object Type {
   /**
     * Returns a fresh error type of the given kind `k`.
     */
-  def freshError(k: Kind, loc: SourceLocation)(implicit flix: Flix): Type = {
-    val id = flix.genSym.freshId()
+  def freshError(k: Kind, loc: SourceLocation)(implicit genSym: GenSym): Type = {
+    val id = genSym.freshId()
     Type.Cst(TypeConstructor.Error(id, k), loc)
   }
 
